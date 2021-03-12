@@ -100,6 +100,7 @@ local langStrings = {
   en =
   {
     member      = "Member for %s%i %s",
+    sinceLogoff = "Offline for %s%i %s",
     depositions = "Deposits",
     withdrawals = "Withdrawals",
     total       = "Total: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (over %i %s)",
@@ -111,6 +112,7 @@ local langStrings = {
   fr =
   {
     member      = "Membre pour %s%i %s",
+    sinceLogoff = "Offline for %s%i %s",
     depositions = "Dépôts",
     withdrawals = "Retraits",
     total       = "Total: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (sur %i %s)",
@@ -122,6 +124,7 @@ local langStrings = {
   de =
   {
     member      = "Mitglied seit %s%i %s",
+    sinceLogoff = "Offline for %s%i %s",
     depositions = "Einzahlungen",
     withdrawals = "Auszahlungen",
     total       = "Gesamt: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (innerhalb von %i %s)",
@@ -133,6 +136,7 @@ local langStrings = {
   ru =
   {
     member      = "Member for %s%i %s",
+    sinceLogoff = "Offline for %s%i %s",
     depositions = "Deposits",
     withdrawals = "Withdrawals",
     total       = "Total: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (over %i %s)",
@@ -205,6 +209,10 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
         tooltip = tooltip .. string.format(langStrings[lang]["member"], "", num, str) .. "\n\n"
       end
 
+      local _, note, rankIndex, playerStatus, secsSinceLogoff = GetGuildMemberInfo(GUILD_SELECTOR.guildId, savedData[guildName][displayName].userIndex)
+      num, str = secToTime(secsSinceLogoff)
+      tooltip = tooltip .. string.format(langStrings[lang]["sinceLogoff"], "", num, str) .. "\n\n"
+
       tooltip = tooltip .. langStrings[lang]["depositions"] .. ':' .. "\n"
       num, str = secToTime(timeStamp - savedData[guildName]["oldestEvents"][GUILD_HISTORY_BANK])
       tooltip = tooltip .. string.format(langStrings[lang]["total"], savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].total, num, str) .. "\n"
@@ -274,6 +282,7 @@ function AMT.createUser(guildName, displayName)
   if (savedData[guildName][displayName] == nil) then
     savedData[guildName][displayName] = {}
     savedData[guildName][displayName].timeJoined = 0
+    savedData[guildName][displayName].secsSinceLogoff = 0
     savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED] = {}
     savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeFirst = 0
     savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast = 0
@@ -312,9 +321,9 @@ function AMT.processEvent(guildID, category, theEvent)
   local timeStamp = theEvent.evTime
   local guildName = GetGuildName(guildID)
   local displayName = string.lower(theEvent.evName)
-  
+
   if savedData[guildName]["oldestEvents"][category] == 0 or savedData[guildName]["oldestEvents"][category] > timeStamp then savedData[guildName]["oldestEvents"][category] = timeStamp end
-  
+
   if (theEvent.evType == GUILD_EVENT_GUILD_JOIN) then
     if (savedData[guildName][displayName].timeJoined < timeStamp) then
       savedData[guildName][displayName].timeJoined = timeStamp
@@ -511,7 +520,7 @@ function AMT:CheckStatus()
     local numBankEvents                                       = GetNumGuildEvents(guildID, GUILD_HISTORY_BANK)
     local eventGeneralCount, processingGeneralSpeed, timeLeftGeneral = AMT.LibHistoireGeneralListener[guildID]:GetPendingEventMetrics()
     local eventBankCount, processingBankSpeed, timeLeftBank          = AMT.LibHistoireBankListener[guildID]:GetPendingEventMetrics()
-    
+
     if timeLeftGeneral > -1 or (eventGeneralCount == 1 and numGeneralEvents == 0) then AMT.GeneralTimeEstimated[guildID] = true end
     if timeLeftBank > -1 or (eventBankCount == 1 and numBankEvents == 0) then AMT.BankTimeEstimated[guildID] = true end
 
@@ -562,6 +571,18 @@ function AMT:DoRefresh()
   AMT:QueueCheckStatus()
 end
 
+function AMT:UpdateSecsSinceLogoff()
+  for i = 1, GetNumGuilds() do
+    local guildID = GetGuildId(i)
+    local guildName   = GetGuildName(guildID)
+    for i = 1, GetNumGuildMembers(guildID), 1 do
+      local displayName, note, rankIndex, playerStatus, secsSinceLogoff = GetGuildMemberInfo(guildID, i)
+      savedData[guildName][string.lower(displayName)].secsSinceLogoff = secsSinceLogoff
+      savedData[guildName][string.lower(displayName)].userIndex = i
+    end
+  end
+end
+
 function AMT.Slash(allArgs)
   local args   = ""
   local guildNumber   = 0
@@ -604,6 +625,7 @@ local function onAddOnLoaded(eventCode, addonName)
 
   AMT:SetupListenerLibHistoire()
   AMT:KioskFlipListenerSetup()
+  AMT:UpdateSecsSinceLogoff()
 
   EVENT_MANAGER:UnregisterForEvent(AddonName, EVENT_ADD_ON_LOADED)
 end
