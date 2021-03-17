@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
--- Advanced Member Tooltip v1.6
+-- Advanced Member Tooltip v2.00
 -------------------------------------------------------------------------------
--- Author: Arkadius, continued by Calia1120
+-- Author: Arkadius
 -- This Add-on is not created by, affiliated with or sponsored by ZeniMax Media
 -- Inc. or its affiliates. The Elder Scrolls® and related logos are registered
 -- trademarks or trademarks of ZeniMax Media Inc. in the United States and/or
@@ -13,6 +13,7 @@
 ---------------------------------------------------------------------------------
 
 local LGH                       = LibHistoire
+local LAM                       = LibAddonMenu2
 local AddonName = "AdvancedMemberTooltip"
 
 AMT = {}
@@ -22,9 +23,11 @@ AMT.GeneralEventsNeedProcessing = {}
 AMT.GeneralTimeEstimated = {}
 AMT.BankEventsNeedProcessing = {}
 AMT.BankTimeEstimated = {}
-local _, weekCutoff = GetGuildKioskCycleTimes()
-local weekStart    = weekCutoff - 7 * 86400 -- GetGuildKioskCycleTimes() minus 7 days
-local weekEnd      = weekCutoff -- GetGuildKioskCycleTimes()
+local weekCutoff = 0
+local weekStart    = 0
+local weekEnd      = 0
+AMT.useSunday    = false
+AMT.addToCutoff  = 0
 
 local savedData = nil
 local defaultData = {
@@ -32,7 +35,15 @@ local defaultData = {
   lastReceivedBankEventID = {},
   EventProcessed = {},
   CurrentKioskTime = 0,
+  useSunday    = false,
+  addToCutoff  = 0,
 }
+
+local amtDefaults = {
+  useSunday    = false,
+  addToCutoff  = 0,
+}
+
 
 if LibDebugLogger then
   local logger          = LibDebugLogger.Create(AddonName)
@@ -42,17 +53,22 @@ local SDLV = DebugLogViewer
 if SDLV then AMT.viewer = true else AMT.viewer = false end
 
 local function create_log(log_type, log_content)
+  if not AMT.viewer and log_type == "Info" then 
+    CHAT_ROUTER:AddSystemMessage(log_content)
+    return 
+  end
+  if not AMT.logger then return end
   if log_type == "Debug" then
-  AMT.logger:Debug(log_content)
+    AMT.logger:Debug(log_content)
   end
   if log_type == "Info" then
-  AMT.logger:Info(log_content)
+    AMT.logger:Info(log_content)
   end
   if log_type == "Verbose" then
-  AMT.logger:Verbose(log_content)
+    AMT.logger:Verbose(log_content)
   end
   if log_type == "Warn" then
-  AMT.logger:Warn(log_content)
+    AMT.logger:Warn(log_content)
   end
 end
 
@@ -84,14 +100,13 @@ local function emit_table(log_type, t, indent, table_history)
 end
 
 function AMT:dm(log_type, ...)
-  if not AMT.logger then return end
   for i = 1, select("#", ...) do
-  local value = select(i, ...)
-  if (type(value) == "table") then
-    emit_table(log_type, value)
-  else
-    emit_message(log_type, tostring(value))
-  end
+    local value = select(i, ...)
+    if (type(value) == "table") then
+      emit_table(log_type, value)
+    else
+      emit_message(log_type, tostring(value))
+    end
   end
 end
 
@@ -203,15 +218,22 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
 
       if (savedData[guildName][displayName].timeJoined == 0) then
         num, str = secToTime(timeStamp - savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL])
-        tooltip = tooltip .. string.format(langStrings[lang]["member"], "> ", num, str) .. "\n\n"
+        tooltip = tooltip .. string.format(langStrings[lang]["member"], "> ", num, str) .. "\n"
       else
         num, str = secToTime(timeStamp - savedData[guildName][displayName].timeJoined)
-        tooltip = tooltip .. string.format(langStrings[lang]["member"], "", num, str) .. "\n\n"
+        tooltip = tooltip .. string.format(langStrings[lang]["member"], "", num, str) .. "\n"
       end
 
-      local _, note, rankIndex, playerStatus, secsSinceLogoff = GetGuildMemberInfo(GUILD_SELECTOR.guildId, savedData[guildName][displayName].userIndex)
-      num, str = secToTime(secsSinceLogoff)
-      tooltip = tooltip .. string.format(langStrings[lang]["sinceLogoff"], "", num, str) .. "\n\n"
+      if savedData[guildName][displayName].playerStatusLastSeen == 0 then
+        tooltip = tooltip .. "Player: Online" .. "\n\n"
+      elseif savedData[guildName][displayName].playerStatusLastSeen == 4615674491 then
+        tooltip = tooltip .. "Player: Unseen" .. "\n\n"
+      else
+        local secsSinceLogoff = timeStamp - savedData[guildName][displayName].playerStatusLastSeen
+        if secsSinceLogoff < 0 then secsSinceLogoff = 0 end
+        num, str = secToTime(secsSinceLogoff)
+        tooltip = tooltip .. string.format(langStrings[lang]["sinceLogoff"], "", num, str) .. "\n\n"
+      end
 
       tooltip = tooltip .. langStrings[lang]["depositions"] .. ':' .. "\n"
       num, str = secToTime(timeStamp - savedData[guildName]["oldestEvents"][GUILD_HISTORY_BANK])
@@ -282,7 +304,9 @@ function AMT.createUser(guildName, displayName)
   if (savedData[guildName][displayName] == nil) then
     savedData[guildName][displayName] = {}
     savedData[guildName][displayName].timeJoined = 0
-    savedData[guildName][displayName].secsSinceLogoff = 0
+    savedData[guildName][displayName].playerStatusOnline = false
+    savedData[guildName][displayName].playerStatusOffline = false
+    savedData[guildName][displayName].playerStatusLastSeen = 4615674491
     savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED] = {}
     savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeFirst = 0
     savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast = 0
@@ -476,14 +500,14 @@ function AMT:ExportGuildStats()
   local numGuilds = GetNumGuilds()
   local guildNum  = self.guildNumber
   if guildNum > numGuilds then
-    AMT:dm("Debug", "Invalid Guild Number.")
+    AMT:dm("Info", "Invalid Guild Number.")
     return
   end
 
   local guildID   = GetGuildId(guildNum)
   local guildName = GetGuildName(guildID)
 
-  AMT:dm("Debug", guildName)
+  AMT:dm("Info", guildName)
   export[guildName]     = {}
   local list            = export[guildName]
 
@@ -521,14 +545,20 @@ function AMT:CheckStatus()
     local eventGeneralCount, processingGeneralSpeed, timeLeftGeneral = AMT.LibHistoireGeneralListener[guildID]:GetPendingEventMetrics()
     local eventBankCount, processingBankSpeed, timeLeftBank          = AMT.LibHistoireBankListener[guildID]:GetPendingEventMetrics()
 
-    if timeLeftGeneral > -1 or (eventGeneralCount == 1 and numGeneralEvents == 0) then AMT.GeneralTimeEstimated[guildID] = true end
-    if timeLeftBank > -1 or (eventBankCount == 1 and numBankEvents == 0) then AMT.BankTimeEstimated[guildID] = true end
+    timeLeftGeneral = math.floor(timeLeftGeneral)
+    timeLeftBank = math.floor(timeLeftBank)
+
+    if timeLeftGeneral ~= -1 or processingGeneralSpeed ~= -1 then AMT.GeneralTimeEstimated[guildID] = true end
+    if timeLeftBank ~= -1 or processingBankSpeed ~= -1 then AMT.BankTimeEstimated[guildID] = true end
 
     if (timeLeftGeneral == -1 and eventGeneralCount == 1 and numGeneralEvents == 0) and AMT.GeneralTimeEstimated[guildID] then AMT.GeneralEventsNeedProcessing[guildID] = false end
     if (timeLeftBank == -1 and eventBankCount == 1 and numBankEvents == 0) and AMT.BankTimeEstimated[guildID] then AMT.BankEventsNeedProcessing[guildID] = false end
 
     if eventGeneralCount == 0 and AMT.GeneralTimeEstimated[guildID] then AMT.GeneralEventsNeedProcessing[guildID] = false end
     if eventBankCount == 0 and AMT.BankTimeEstimated[guildID] then AMT.BankEventsNeedProcessing[guildID] = false end
+
+    if timeLeftGeneral == 0 and AMT.GeneralTimeEstimated[guildID] then AMT.GeneralEventsNeedProcessing[guildID] = false end
+    if timeLeftBank == 0 and AMT.BankTimeEstimated[guildID] then AMT.BankEventsNeedProcessing[guildID] = false end
   end
   for i = 1, GetNumGuilds() do
     local guildID = GetGuildId(i)
@@ -542,14 +572,14 @@ function AMT:QueueCheckStatus()
   local eventsRemaining = AMT:CheckStatus()
   if eventsRemaining then
     zo_callLater(function() AMT:QueueCheckStatus() end, 60000) -- 60000 1 minute
-    AMT:dm("Debug", "LibHistoire AMT Refresh Not Finished Yet")
+    AMT:dm("Info", "LibHistoire AMT Refresh Not Finished Yet")
   else
-    AMT:dm("Debug", "LibHistoire AMT Refresh Finished")
+    AMT:dm("Info", "LibHistoire AMT Refresh Finished")
   end
 end
 
 function AMT:DoRefresh()
-  AMT:dm("Debug", 'LibHistoire refreshing AMT...')
+  AMT:dm("Info", 'LibHistoire refreshing AMT...')
   numGuilds = GetNumGuilds()
   for i = 1, numGuilds do
     local guildID = GetGuildId(i)
@@ -571,16 +601,103 @@ function AMT:DoRefresh()
   AMT:QueueCheckStatus()
 end
 
-function AMT:UpdateSecsSinceLogoff()
+function AMT:UpdatePlayerStatusLastSeen()
+  AMT:dm("Debug", "UpdatePlayerStatusLastSeen")
   for i = 1, GetNumGuilds() do
     local guildID = GetGuildId(i)
     local guildName   = GetGuildName(guildID)
     for i = 1, GetNumGuildMembers(guildID), 1 do
       local displayName, note, rankIndex, playerStatus, secsSinceLogoff = GetGuildMemberInfo(guildID, i)
-      savedData[guildName][string.lower(displayName)].secsSinceLogoff = secsSinceLogoff
-      savedData[guildName][string.lower(displayName)].userIndex = i
+      displayName = string.lower(displayName)
+      if savedData[guildName][displayName] == nil then  AMT.createUser(guildName, displayName) end
+      if savedData[guildName][displayName].playerStatusOffline == nil then savedData[guildName][displayName].playerStatusOffline = false end
+      if savedData[guildName][displayName].playerStatusOnline == nil then savedData[guildName][displayName].playerStatusOnline = false end
+      if savedData[guildName][displayName].playerStatusLastSeen == nil then savedData[guildName][displayName].playerStatusLastSeen = 4615674491 end
+
+      if playerStatus == PLAYER_STATUS_ONLINE or playerStatus == PLAYER_STATUS_DO_NOT_DISTURB or playerStatus == PLAYER_STATUS_AWAY then
+        savedData[guildName][displayName].playerStatusOnline = true
+        savedData[guildName][displayName].playerStatusOffline = false
+        savedData[guildName][displayName].playerStatusLastSeen = 0
+      end
+      if playerStatus == PLAYER_STATUS_OFFLINE and savedData[guildName][displayName].playerStatusLastSeen == 0 then
+        savedData[guildName][displayName].playerStatusOffline = true
+        savedData[guildName][displayName].playerStatusOnline = false
+        savedData[guildName][displayName].playerStatusLastSeen = GetTimeStamp()
+      end
     end
   end
+end
+
+function OnStatusChanged(eventCode, guildId, displayName, oldStatus, newStatus)
+  local guildName   = GetGuildName(guildId)
+  displayName = string.lower(displayName)
+  if savedData[guildName][displayName] == nil then  AMT.createUser(guildName, displayName) end
+  if savedData[guildName][displayName].playerStatusOffline == nil then savedData[guildName][displayName].playerStatusOffline = false end
+  if savedData[guildName][displayName].playerStatusOnline == nil then savedData[guildName][displayName].playerStatusOnline = false end
+  if savedData[guildName][displayName].playerStatusLastSeen == nil then savedData[guildName][displayName].playerStatusLastSeen = 4615674491 end
+
+  if newStatus == PLAYER_STATUS_ONLINE or playerStatus == PLAYER_STATUS_DO_NOT_DISTURB or playerStatus == PLAYER_STATUS_AWAY then
+    savedData[guildName][displayName].playerStatusOnline = true
+    savedData[guildName][displayName].playerStatusOffline = false
+    savedData[guildName][displayName].playerStatusLastSeen = 0
+  end
+  if newStatus == PLAYER_STATUS_OFFLINE and savedData[guildName][displayName].playerStatusLastSeen == 0 then
+    savedData[guildName][displayName].playerStatusOffline = true
+    savedData[guildName][displayName].playerStatusOnline = false
+    savedData[guildName][displayName].playerStatusLastSeen = GetTimeStamp()
+  end
+end
+EVENT_MANAGER:RegisterForEvent(AddonName, EVENT_GUILD_MEMBER_PLAYER_STATUS_CHANGED, OnStatusChanged)
+
+function AMT.ModifySundayTime()
+  local modifyStartTime = 0
+  local addHours = 0
+  if GetWorldName() == "NA Megaserver" then
+    modifyStartTime = modifyStartTime + (3600 * 12) -- roll to midnight Tuesday
+    modifyStartTime = modifyStartTime + (3600 * 48) -- roll to midnight Sunday
+  else
+    modifyStartTime = modifyStartTime + (3600 * 6) -- roll to midnight Tuesday
+    modifyStartTime = modifyStartTime + (3600 * 48) -- roll to midnight Sunday
+  end
+  addHours = (3600 * savedData.addToCutoff) -- add additional hours past midnight 
+  return modifyStartTime, addHours
+end
+
+function AMT.DoSundayTime()
+  AMT:dm("Debug", "DoSundayTime")
+  local modifyStartTime, addHours = AMT.ModifySundayTime()
+  weekStart = weekStart - modifyStartTime
+  weekStart = weekStart + addHours
+  weekEnd = weekEnd - modifyStartTime
+  weekEnd = weekEnd + addHours
+  --[[
+  AMT:dm("Info", "weekEnd = weekEnd - modifyStartTime")
+  AMT:dm("Info", weekStart)
+  AMT:dm("Info", weekEnd)
+  AMT:dm("Info", os.date("%c", weekStart))
+  AMT:dm("Info", os.date("%c", weekEnd))
+  ]]--
+  
+  local timeString = "Cutoff Times: "
+  local timeStart = os.date("%c", weekStart)
+  local timeEnd = os.date("%c", weekEnd)
+  
+  timeString = timeString .. timeStart .. " / " .. timeEnd
+  AMT:dm("Info", timeString)
+end
+
+function AMT.DoTuesdayTime()
+  AMT:dm("Debug", "DoTuesdayTime")
+  local _, weekCutoff = GetGuildKioskCycleTimes()
+  weekStart    = weekCutoff - (7 * 86400) -- GetGuildKioskCycleTimes() minus 7 days
+  weekEnd      = weekCutoff -- GetGuildKioskCycleTimes()
+
+  local timeString = "Cutoff Times: "
+  local timeStart = os.date("%c", weekStart)
+  local timeEnd = os.date("%c", weekEnd)
+  
+  timeString = timeString .. timeStart .. " / " .. timeEnd
+  if not savedData.useSunday then AMT:dm("Info", timeString) end
 end
 
 function AMT.Slash(allArgs)
@@ -603,13 +720,72 @@ function AMT.Slash(allArgs)
     AMT:DoRefresh()
   end
 end
+
+function AMT:LibAddonInit()
+  AMT:dm("Debug", "LibAddonInit")
+  local panelData = {
+    type                = 'panel',
+    name                = 'AdvancedMemberTooltip',
+    displayName         = 'Advanced Member Tooltip',
+    author              = 'Sharlikran',
+    version             = '2.02',
+    registerForRefresh  = true,
+    registerForDefaults = true,
+  }
+  LAM:RegisterAddonPanel('AdvancedMemberTooltipOptions', panelData)
+
+  local optionsData = {
+    -- Open main window with mailbox scenes
+    [1]  = {
+      type    = 'checkbox',
+      name    = "Use Sunday Cutoff",
+      tooltip = "Use Sunday as the cutoff instead of the Tuesday Kiosk Flip.",
+      getFunc = function() return savedData.useSunday end,
+      setFunc = function(value)
+        savedData.useSunday = value
+        if not savedData.useSunday then
+          savedData.addToCutoff = 0
+        end
+        AMT.DoTuesdayTime()
+        if savedData.useSunday then AMT.DoSundayTime() end
+      end,
+      default = amtDefaults.useSunday,
+    },
+    [2] = {
+      type    = 'slider',
+      name    = "Add Hours Past Midnight",
+      tooltip = "Add X amount of hours to midnight for cutoff time.",
+      min     = 0,
+      max     = 36,
+      getFunc = function() return savedData.addToCutoff end,
+      setFunc = function(value)
+        savedData.addToCutoff = value
+        AMT.DoTuesdayTime()
+        if savedData.useSunday then AMT.DoSundayTime() end
+      end,
+      default = amtDefaults.addToCutoff,
+      disabled = function() return not savedData.useSunday end,
+    },
+    [3] = {
+        type = "description",
+        title = "Note",
+        text = "Use /amt refresh if you change this setting",
+        width = "full",
+    },
+  }
+
+  LAM:RegisterOptionControls('AdvancedMemberTooltipOptions', optionsData)
+end
+
 -- Will be called upon loading the addon
 local function onAddOnLoaded(eventCode, addonName)
   if (addonName ~= AddonName) then
     return
   end
-
+  
   savedData = ZO_SavedVars:NewAccountWide(AddonName, 1, nil, defaultData)
+  AMT.DoTuesdayTime()
+  if savedData.useSunday then AMT.DoSundayTime() end
   -- Set up /amt as a slash command toggle for the main window
   SLASH_COMMANDS['/amt'] = AMT.Slash
   for i = 1, GetNumGuilds() do
@@ -623,9 +799,10 @@ local function onAddOnLoaded(eventCode, addonName)
     if savedData["lastReceivedBankEventID"][guildID] == nil then savedData["lastReceivedBankEventID"][guildID] = "0" end
   end
 
+  AMT:LibAddonInit()
   AMT:SetupListenerLibHistoire()
   AMT:KioskFlipListenerSetup()
-  AMT:UpdateSecsSinceLogoff()
+  AMT:UpdatePlayerStatusLastSeen()
 
   EVENT_MANAGER:UnregisterForEvent(AddonName, EVENT_ADD_ON_LOADED)
 end
