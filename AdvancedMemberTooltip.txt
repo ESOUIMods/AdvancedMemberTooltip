@@ -2,11 +2,11 @@
 ## Author: Sharlikran, Arkadius
 ## APIVersion: 100033 100034
 ## Description: Adds time of membership and guild bank depositions/withdrawals (gold only) to the guild roster tooltips
-## Version: 2.02
-## AddOnVersion: 202
+## Version: 2.05
+## AddOnVersion: 205
 ## SavedVariables: AdvancedMemberTooltip
 ## DependsOn: LibHistoire>=394 LibAddonMenu-2.0>=32
-## OptionalDependsOn: MasterMerchant LibGuildRoster
+## OptionalDependsOn: MasterMerchant LibGuildRoster DebugLogViewer
 
 AdvancedMemberTooltip.lua
 
