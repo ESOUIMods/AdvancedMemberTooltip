@@ -38,6 +38,7 @@ local defaultData               = {
   CurrentKioskTime           = 0,
   useSunday                  = false,
   addToCutoff                = 0,
+  exportEpochTime            = false,
 }
 
 local amtDefaults               = {
@@ -535,16 +536,21 @@ function AMT:ExportGuildStats()
 
     if (timeJoined == 0) then
       local timeValue, timeString = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL])
-      timeStringOutput            = string.format("= %s%i %s", "> ", timeValue, timeString)
+      timeStringOutput            = string.format(" = %s%i %s", "> ", timeValue, timeString)
     else
       local timeValue, timeString = secToTime(timeStamp - timeJoined)
-      timeStringOutput            = string.format("= %s%i %s", "", timeValue, timeString)
+      timeStringOutput            = string.format(" = %s%i %s", "", timeValue, timeString)
+    end
+ 
+    if AMT.savedData.exportEpochTime then
+      lastSeenString = AMT.savedData[guildName][displayNameKey].playerStatusLastSeen
+      timeStringOutput = "&" .. AMT.savedData[guildName][displayNameKey].timeJoined
     end
 
     -- export normal case for displayName
     -- sample = "@displayName&timeJoined&amountDeposited&amountWithdrawan"
     table.insert(list,
-      displayName .. " " .. timeStringOutput .. "&" .. lastSeenString .. "&" .. amountDeposited .. "&" .. amountWithdrawan)
+      displayName .. timeStringOutput .. "&" .. lastSeenString .. "&" .. amountDeposited .. "&" .. amountWithdrawan)
   end
   AMT:dm("Info", "Guild Stats Export complete.  /reloadui to save the file.")
 end
@@ -755,7 +761,7 @@ function AMT:LibAddonInit()
     name                = 'AdvancedMemberTooltip',
     displayName         = 'Advanced Member Tooltip',
     author              = 'Sharlikran',
-    version             = '2.05',
+    version             = '2.07',
     registerForRefresh  = true,
     registerForDefaults = true,
   }
@@ -764,6 +770,16 @@ function AMT:LibAddonInit()
   local optionsData = {
     -- Open main window with mailbox scenes
     [1] = {
+      type    = 'checkbox',
+      name    = "Export in Epoch Time",
+      tooltip = "Export in Epoch Time that the game uses rather then convert the time stamp to text.",
+      getFunc = function() return AMT.savedData.exportEpochTime end,
+      setFunc = function(value)
+        AMT.savedData.exportEpochTime = value
+      end,
+      default = amtDefaults.exportEpochTime,
+    },
+    [2] = {
       type    = 'checkbox',
       name    = "Use Sunday Cutoff",
       tooltip = "Use Sunday as the cutoff instead of the Tuesday Kiosk Flip.",
@@ -778,7 +794,7 @@ function AMT:LibAddonInit()
       end,
       default = amtDefaults.useSunday,
     },
-    [2] = {
+    [3] = {
       type     = 'slider',
       name     = "Add Hours Past Midnight",
       tooltip  = "Add X amount of hours to midnight for cutoff time.",
@@ -793,7 +809,7 @@ function AMT:LibAddonInit()
       default  = amtDefaults.addToCutoff,
       disabled = function() return not AMT.savedData.useSunday end,
     },
-    [3] = {
+    [4] = {
       type  = "description",
       title = "Note",
       text  = "Use /amt refresh if you change this setting",
