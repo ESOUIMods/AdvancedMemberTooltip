@@ -350,7 +350,7 @@ function AMT.processEvent(guildID, category, theEvent)
   if AMT.savedData[guildName]["oldestEvents"][category] == 0 or AMT.savedData[guildName]["oldestEvents"][category] > timeStamp then AMT.savedData[guildName]["oldestEvents"][category] = timeStamp end
 
   if (theEvent.evType == GUILD_EVENT_GUILD_JOIN) then
-    if (AMT.savedData[guildName][displayName].timeJoined < timeStamp) then
+    if (AMT.savedData[guildName][displayName].timeJoined ~= timeStamp) then
       AMT.savedData[guildName][displayName].timeJoined = timeStamp
       --AMT:dm("Debug", "General Event")
     end
@@ -525,6 +525,14 @@ function AMT:ExportGuildStats()
     local timeStringOutput        = ""
     local lastSeenString          = ""
 
+    if (timeJoined == 0) then
+      local timeValue, timeString = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL])
+      timeStringOutput            = string.format(" = %s%i %s", "> ", timeValue, timeString)
+    else
+      local timeValue, timeString = secToTime(timeStamp - timeJoined)
+      timeStringOutput            = string.format(" = %s%i %s", "", timeValue, timeString)
+    end
+
     if (playerStatusLastSeen == 4615674491) then
       lastSeenString = "Unseen"
     else
@@ -534,17 +542,15 @@ function AMT:ExportGuildStats()
       lastSeenString = string.format("%i %s", num, str)
     end
 
-    if (timeJoined == 0) then
-      local timeValue, timeString = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL])
-      timeStringOutput            = string.format(" = %s%i %s", "> ", timeValue, timeString)
-    else
-      local timeValue, timeString = secToTime(timeStamp - timeJoined)
-      timeStringOutput            = string.format(" = %s%i %s", "", timeValue, timeString)
-    end
- 
     if AMT.savedData.exportEpochTime then
-      lastSeenString = AMT.savedData[guildName][displayNameKey].playerStatusLastSeen
       timeStringOutput = "&" .. AMT.savedData[guildName][displayNameKey].timeJoined
+      lastSeenString = AMT.savedData[guildName][displayNameKey].playerStatusLastSeen
+    end
+    if timeJoined == 0 then
+      timeStringOutput = "&" .. 1396594800
+    end
+    if AMT.savedData[guildName][displayNameKey].playerStatusLastSeen == 4615674491 then
+      lastSeenString = "0"
     end
 
     -- export normal case for displayName
@@ -679,7 +685,7 @@ function AMT.ModifySundayTime()
     modifyStartTime = modifyStartTime + (3600 * 6) -- roll to midnight Tuesday
     modifyStartTime = modifyStartTime + (3600 * 48) -- roll to midnight Sunday
   end
-  addHours = (3600 * AMT.savedData.addToCutoff) -- add additional hours past midnight 
+  addHours = (3600 * AMT.savedData.addToCutoff) -- add additional hours past midnight
   return modifyStartTime, addHours
 end
 
@@ -751,6 +757,11 @@ function AMT.Slash(allArgs)
     AMT:DoRefresh()
     return
   end
+  if args == 'fullrefresh' then
+    AMT.savedData["CurrentKioskTime"] = 1396594800
+    AMT:KioskFlipListenerSetup()
+    return
+  end
   AMT:dm("Info", string.format("[AMT] %s : is an unrecognized command.", args))
 end
 
@@ -761,7 +772,7 @@ function AMT:LibAddonInit()
     name                = 'AdvancedMemberTooltip',
     displayName         = 'Advanced Member Tooltip',
     author              = 'Sharlikran',
-    version             = '2.07',
+    version             = '2.08',
     registerForRefresh  = true,
     registerForDefaults = true,
   }
