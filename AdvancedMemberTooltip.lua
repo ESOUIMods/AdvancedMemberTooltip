@@ -419,6 +419,9 @@ function AMT:SetupListener(guildID)
         evGold  = nil, -- because it is when user joined
         eventId = Id64ToString(eventId), -- eventId but new
       }
+      local guildName = GetGuildName(guildID)
+      local displayName = string.lower(theEvent.evName)
+      if not AMT.savedData[guildName][displayName] then AMT:createUser(guildName, displayName) end
       AMT.processEvent(guildID, GUILD_HISTORY_GENERAL, theEvent)
     end
   end)
@@ -516,47 +519,49 @@ function AMT:ExportGuildStats()
   for guildMemberIndex = 1, numGuildMembers do
     local displayName, _, _, _, _ = GetGuildMemberInfo(guildID, guildMemberIndex)
     displayNameKey                = string.lower(displayName) -- because it's stored this way
+    if AMT.savedData[guildName][displayNameKey] then
 
-    local amountDeposited         = AMT.savedData[guildName][displayNameKey][GUILD_EVENT_BANKGOLD_ADDED].total or 0
-    local amountWithdrawan        = AMT.savedData[guildName][displayNameKey][GUILD_EVENT_BANKGOLD_REMOVED].total or 0
-    local timeJoined              = AMT.savedData[guildName][displayNameKey].timeJoined or 0
-    local playerStatusLastSeen    = AMT.savedData[guildName][displayNameKey].playerStatusLastSeen
-    local timeStamp               = GetTimeStamp()
-    local timeStringOutput        = ""
-    local lastSeenString          = ""
+      local amountDeposited         = AMT.savedData[guildName][displayNameKey][GUILD_EVENT_BANKGOLD_ADDED].total or 0
+      local amountWithdrawan        = AMT.savedData[guildName][displayNameKey][GUILD_EVENT_BANKGOLD_REMOVED].total or 0
+      local timeJoined              = AMT.savedData[guildName][displayNameKey].timeJoined or 0
+      local playerStatusLastSeen    = AMT.savedData[guildName][displayNameKey].playerStatusLastSeen
+      local timeStamp               = GetTimeStamp()
+      local timeStringOutput        = ""
+      local lastSeenString          = ""
 
-    if (timeJoined == 0) then
-      local timeValue, timeString = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL])
-      timeStringOutput            = string.format(" = %s%i %s", "> ", timeValue, timeString)
-    else
-      local timeValue, timeString = secToTime(timeStamp - timeJoined)
-      timeStringOutput            = string.format(" = %s%i %s", "", timeValue, timeString)
-    end
+      if (timeJoined == 0) then
+        local timeValue, timeString = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL])
+        timeStringOutput            = string.format(" = %s%i %s", "> ", timeValue, timeString)
+      else
+        local timeValue, timeString = secToTime(timeStamp - timeJoined)
+        timeStringOutput            = string.format(" = %s%i %s", "", timeValue, timeString)
+      end
 
-    if (playerStatusLastSeen == 4615674491) then
-      lastSeenString = "Unseen"
-    else
-      local secsSinceLogoff = timeStamp - playerStatusLastSeen
-      if secsSinceLogoff < 0 then secsSinceLogoff = 0 end
-      local num, str = secToTime(secsSinceLogoff)
-      lastSeenString = string.format("%i %s", num, str)
-    end
+      if (playerStatusLastSeen == 4615674491) then
+        lastSeenString = "Unseen"
+      else
+        local secsSinceLogoff = timeStamp - playerStatusLastSeen
+        if secsSinceLogoff < 0 then secsSinceLogoff = 0 end
+        local num, str = secToTime(secsSinceLogoff)
+        lastSeenString = string.format("%i %s", num, str)
+      end
 
-    if AMT.savedData.exportEpochTime then
-      timeStringOutput = "&" .. AMT.savedData[guildName][displayNameKey].timeJoined
-      lastSeenString = AMT.savedData[guildName][displayNameKey].playerStatusLastSeen
-    end
-    if timeJoined == 0 then
-      timeStringOutput = "&" .. 1396594800
-    end
-    if AMT.savedData[guildName][displayNameKey].playerStatusLastSeen == 4615674491 then
-      lastSeenString = "0"
-    end
+      if AMT.savedData.exportEpochTime then
+        timeStringOutput = "&" .. AMT.savedData[guildName][displayNameKey].timeJoined
+        lastSeenString = AMT.savedData[guildName][displayNameKey].playerStatusLastSeen
+      end
+      if timeJoined == 0 then
+        timeStringOutput = "&" .. 1396594800
+      end
+      if AMT.savedData[guildName][displayNameKey].playerStatusLastSeen == 4615674491 then
+        lastSeenString = "0"
+      end
 
-    -- export normal case for displayName
-    -- sample = "@displayName&timeJoined&amountDeposited&amountWithdrawan"
-    table.insert(list,
-      displayName .. timeStringOutput .. "&" .. lastSeenString .. "&" .. amountDeposited .. "&" .. amountWithdrawan)
+      -- export normal case for displayName
+      -- sample = "@displayName&timeJoined&amountDeposited&amountWithdrawan"
+      table.insert(list,
+        displayName .. timeStringOutput .. "&" .. lastSeenString .. "&" .. amountDeposited .. "&" .. amountWithdrawan)
+    end
   end
   AMT:dm("Info", "Guild Stats Export complete.  /reloadui to save the file.")
 end
@@ -772,7 +777,7 @@ function AMT:LibAddonInit()
     name                = 'AdvancedMemberTooltip',
     displayName         = 'Advanced Member Tooltip',
     author              = 'Sharlikran',
-    version             = '2.08',
+    version             = '2.09',
     registerForRefresh  = true,
     registerForDefaults = true,
   }
