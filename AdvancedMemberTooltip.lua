@@ -17,6 +17,39 @@ local LAM                       = LibAddonMenu2
 local AddonName                 = "AdvancedMemberTooltip"
 
 AMT                             = {}
+
+-------------------------------------------------
+----- early helper                          -----
+-------------------------------------------------
+
+local function is_in(search_value, search_table)
+    for k, v in pairs(search_table) do
+        if search_value == v then return true end
+        if type(search_value) == "string" then
+            if string.find(string.lower(v), string.lower(search_value)) then return true end
+        end
+    end
+    return false
+end
+
+-------------------------------------------------
+----- lang setup                            -----
+-------------------------------------------------
+
+AMT.client_lang = GetCVar("language.2")
+AMT.effective_lang = nil
+AMT.supported_lang = { "de", "en", "fr", }
+if is_in(AMT.client_lang, AMT.supported_lang) then
+  AMT.effective_lang = AMT.client_lang
+else
+  AMT.effective_lang = "en"
+end
+AMT.supported_lang = AMT.client_lang == AMT.effective_lang
+
+-------------------------------------------------
+----- mod                                   -----
+-------------------------------------------------
+
 _, AMT.kioskCycle               = GetGuildKioskCycleTimes()
 AMT.LibHistoireGeneralListener  = {}
 AMT.LibHistoireBankListener     = {}
@@ -111,7 +144,6 @@ function AMT:dm(log_type, ...)
   end
 end
 
-local lang                                                  = GetCVar('Language.2')
 local langStrings                                           = {
   en = {
     member      = "Member for %s%i %s",
@@ -146,17 +178,6 @@ local langStrings                                           = {
     hour        = "Stunde",
     day         = "Tag"
   },
-  ru = {
-    member      = "Member for %s%i %s",
-    sinceLogoff = "Offline for %s%i %s",
-    depositions = "Deposits",
-    withdrawals = "Withdrawals",
-    total       = "Total: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (over %i %s)",
-    last        = "Last: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (%i %s ago)",
-    minute      = "minute",
-    hour        = "hour",
-    day         = "day"
-  },
 }
 
 -- Hooked functions
@@ -166,7 +187,7 @@ local org_ZO_KeyboardGuildRosterRowDisplayName_OnMouseExit  = ZO_KeyboardGuildRo
 local function secToTime(timeframe)
   -- in seconds
   local timeResult = math.floor(timeframe / 60)
-  local str        = langStrings[lang]["minute"]
+  local str        = langStrings[AMT.effective_lang]["minute"]
 
   if (timeResult > 60) then
     timeResult = math.floor(timeframe / (60 * 60))
@@ -174,19 +195,19 @@ local function secToTime(timeframe)
     if (timeResult > 24) then
       timeResult = math.floor(timeframe / (60 * 60 * 24))
 
-      str        = langStrings[lang]["day"]
+      str        = langStrings[AMT.effective_lang]["day"]
     else
-      str = langStrings[lang]["hour"]
+      str = langStrings[AMT.effective_lang]["hour"]
     end
   end
 
   if (timeResult ~= 1) then
-    if (lang == "en") then
+    if (AMT.effective_lang == "en") then
       str = str .. 's'
     end
 
-    if (lang == "de") then
-      if (str == langStrings[lang]["day"]) then
+    if (AMT.effective_lang == "de") then
+      if (str == langStrings[AMT.effective_lang]["day"]) then
         str = str .. 'en'
       else
         str = str .. 'n'
@@ -215,10 +236,10 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
 
       if (AMT.savedData[guildName][displayName].timeJoined == 0) then
         num, str = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL])
-        tooltip  = tooltip .. string.format(langStrings[lang]["member"], "> ", num, str) .. "\n"
+        tooltip  = tooltip .. string.format(langStrings[AMT.effective_lang]["member"], "> ", num, str) .. "\n"
       else
         num, str = secToTime(timeStamp - AMT.savedData[guildName][displayName].timeJoined)
-        tooltip  = tooltip .. string.format(langStrings[lang]["member"], "", num, str) .. "\n"
+        tooltip  = tooltip .. string.format(langStrings[AMT.effective_lang]["member"], "", num, str) .. "\n"
       end
 
       if AMT.savedData[guildName][displayName].playerStatusLastSeen == 0 then
@@ -229,12 +250,12 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
         local secsSinceLogoff = timeStamp - AMT.savedData[guildName][displayName].playerStatusLastSeen
         if secsSinceLogoff < 0 then secsSinceLogoff = 0 end
         num, str = secToTime(secsSinceLogoff)
-        tooltip  = tooltip .. string.format(langStrings[lang]["sinceLogoff"], "", num, str) .. "\n\n"
+        tooltip  = tooltip .. string.format(langStrings[AMT.effective_lang]["sinceLogoff"], "", num, str) .. "\n\n"
       end
 
-      tooltip  = tooltip .. langStrings[lang]["depositions"] .. ':' .. "\n"
+      tooltip  = tooltip .. langStrings[AMT.effective_lang]["depositions"] .. ':' .. "\n"
       num, str = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_BANK])
-      tooltip  = tooltip .. string.format(langStrings[lang]["total"],
+      tooltip  = tooltip .. string.format(langStrings[AMT.effective_lang]["total"],
         AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].total, num, str) .. "\n"
 
       if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast == 0) then
@@ -242,12 +263,12 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
       else
         num, str = secToTime(timeStamp - AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast)
       end
-      tooltip  = tooltip .. string.format(langStrings[lang]["last"],
+      tooltip  = tooltip .. string.format(langStrings[AMT.effective_lang]["last"],
         AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].last, num, str) .. "\n\n"
 
-      tooltip  = tooltip .. langStrings[lang]["withdrawals"] .. ':' .. "\n"
+      tooltip  = tooltip .. langStrings[AMT.effective_lang]["withdrawals"] .. ':' .. "\n"
       num, str = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_BANK])
-      tooltip  = tooltip .. string.format(langStrings[lang]["total"],
+      tooltip  = tooltip .. string.format(langStrings[AMT.effective_lang]["total"],
         AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].total, num, str) .. "\n"
 
       if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast == 0) then
@@ -255,7 +276,7 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
       else
         num, str = secToTime(timeStamp - AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast)
       end
-      tooltip = tooltip .. string.format(langStrings[lang]["last"],
+      tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["last"],
         AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].last, num, str)
     end
   end
@@ -777,7 +798,7 @@ function AMT:LibAddonInit()
     name                = 'AdvancedMemberTooltip',
     displayName         = 'Advanced Member Tooltip',
     author              = 'Sharlikran',
-    version             = '2.09',
+    version             = '2.10',
     registerForRefresh  = true,
     registerForDefaults = true,
   }
