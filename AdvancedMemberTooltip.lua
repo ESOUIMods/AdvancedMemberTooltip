@@ -17,7 +17,7 @@ local LAM                       = LibAddonMenu2
 local AddonName                 = "AdvancedMemberTooltip"
 
 AMT                             = {}
--- GetGuildFoundedDate
+
 -------------------------------------------------
 ----- early helper                          -----
 -------------------------------------------------
@@ -177,6 +177,17 @@ local langStrings                                           = {
     minute      = "Minute",
     hour        = "Stunde",
     day         = "Tag"
+  },
+  ru = {
+    member      = "Member for %s%i %s",
+    sinceLogoff = "Offline for %s%i %s",
+    depositions = "Deposits",
+    withdrawals = "Withdrawals",
+    total       = "Total: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (over %i %s)",
+    last        = "Last: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (%i %s ago)",
+    minute      = "minute",
+    hour        = "hour",
+    day         = "day"
   },
 }
 
