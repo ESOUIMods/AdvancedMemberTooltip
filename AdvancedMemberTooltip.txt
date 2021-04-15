@@ -6,7 +6,7 @@
 ## AddOnVersion: 210
 ## SavedVariables: AdvancedMemberTooltip
 ## DependsOn: LibHistoire>=394 LibAddonMenu-2.0>=32
-## OptionalDependsOn: MasterMerchant LibGuildRoster DebugLogViewer
+## OptionalDependsOn: MasterMerchant LibGuildRoster LibDebugLogger DebugLogViewer
 
 AdvancedMemberTooltip.lua
 

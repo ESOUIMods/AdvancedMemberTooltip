@@ -17,7 +17,7 @@ local LAM                       = LibAddonMenu2
 local AddonName                 = "AdvancedMemberTooltip"
 
 AMT                             = {}
-
+-- GetGuildFoundedDate
 -------------------------------------------------
 ----- early helper                          -----
 -------------------------------------------------
@@ -36,7 +36,7 @@ end
 ----- lang setup                            -----
 -------------------------------------------------
 
-AMT.client_lang = GetCVar("language.2")
+AMT.client_lang = GetCVar("Language.2")
 AMT.effective_lang = nil
 AMT.supported_lang = { "de", "en", "fr", }
 if is_in(AMT.client_lang, AMT.supported_lang) then
