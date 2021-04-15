@@ -366,7 +366,7 @@ function AMT.resetUser(guildName, displayName)
   AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].total    = 0
 end
 
-function AMT.processEvent(guildID, category, theEvent)
+function AMT.processListenerEvent(guildID, category, theEvent)
   if AMT.savedData["EventProcessed"][theEvent.eventId] == nil then
     AMT.savedData["EventProcessed"][theEvent.eventId] = true
   else
@@ -454,7 +454,7 @@ function AMT:SetupListener(guildID)
       local guildName = GetGuildName(guildID)
       local displayName = string.lower(theEvent.evName)
       if not AMT.savedData[guildName][displayName] then AMT:createUser(guildName, displayName) end
-      AMT.processEvent(guildID, GUILD_HISTORY_GENERAL, theEvent)
+      AMT.processListenerEvent(guildID, GUILD_HISTORY_GENERAL, theEvent)
     end
   end)
 
@@ -480,7 +480,7 @@ function AMT:SetupListener(guildID)
         evGold  = p2, -- The ammount of gold
         eventId = Id64ToString(eventId), -- eventId but new
       }
-      AMT.processEvent(guildID, GUILD_HISTORY_BANK, theEvent)
+      AMT.processListenerEvent(guildID, GUILD_HISTORY_BANK, theEvent)
     end
   end)
 
