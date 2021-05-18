@@ -830,6 +830,9 @@ function OnStatusChanged(eventCode, guildId, displayName, oldStatus, newStatus)
   local guildName = GetGuildName(guildId)
   local name      = string.lower(displayName)
 
+  if AMT.savedData[guildName] == nil then AMT.createGuild(guildName) end
+  if AMT.savedData[guildName][name] == nil then AMT:createUser(guildName, name) end
+
   if newStatus == PLAYER_STATUS_ONLINE or newStatus == PLAYER_STATUS_DO_NOT_DISTURB or newStatus == PLAYER_STATUS_AWAY then
     AMT.savedData[guildName][name].playerStatusOnline  = true
     AMT.savedData[guildName][name].playerStatusOffline = false
@@ -937,7 +940,7 @@ function AMT:LibAddonInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Sharlikran',
-    version = '2.10',
+    version = '2.11',
     registerForRefresh = true,
     registerForDefaults = true,
   }
