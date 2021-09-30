@@ -12,11 +12,11 @@
 --
 ---------------------------------------------------------------------------------
 
-local LGH       = LibHistoire
-local LAM       = LibAddonMenu2
+local LGH = LibHistoire
+local LAM = LibAddonMenu2
 local AddonName = "AdvancedMemberTooltip"
 
-AMT             = {}
+AMT = {}
 
 -------------------------------------------------
 ----- early helper                          -----
@@ -36,7 +36,7 @@ end
 ----- lang setup                            -----
 -------------------------------------------------
 
-AMT.client_lang    = GetCVar("Language.2")
+AMT.client_lang = GetCVar("Language.2")
 AMT.effective_lang = nil
 AMT.supported_lang = { "de", "en", "fr", }
 if is_in(AMT.client_lang, AMT.supported_lang) then
@@ -44,27 +44,28 @@ if is_in(AMT.client_lang, AMT.supported_lang) then
 else
   AMT.effective_lang = "en"
 end
-AMT.supported_lang              = AMT.client_lang == AMT.effective_lang
+AMT.supported_lang = AMT.client_lang == AMT.effective_lang
 
 -------------------------------------------------
 ----- mod                                   -----
 -------------------------------------------------
 
-_, AMT.kioskCycle               = GetGuildKioskCycleTimes()
-AMT.LibHistoireGeneralListener  = {}
-AMT.LibHistoireBankListener     = {}
+_, AMT.kioskCycle = GetGuildKioskCycleTimes()
+AMT.LibHistoireGeneralListener = {}
+AMT.LibHistoireBankListener = {}
 AMT.GeneralEventsNeedProcessing = {}
-AMT.GeneralTimeEstimated        = {}
-AMT.BankEventsNeedProcessing    = {}
-AMT.BankTimeEstimated           = {}
-local weekCutoff                = 0
-local weekStart                 = 0
-local weekEnd                   = 0
-AMT.useSunday                   = false
-AMT.addToCutoff                 = 0
+AMT.GeneralTimeEstimated = {}
+AMT.BankEventsNeedProcessing = {}
+AMT.BankTimeEstimated = {}
+local weekCutoff = 0
+local weekStart = 0
+local weekEnd = 0
+AMT.useSunday = false
+AMT.addToCutoff = 0
+AMT.libHistoireScanByTimestamp = false
 
-AMT.savedData                   = {}
-local defaultData               = {
+AMT.savedData = {}
+local defaultData = {
   lastReceivedGeneralEventID = {},
   lastReceivedBankEventID = {},
   EventProcessed = {},
@@ -74,14 +75,14 @@ local defaultData               = {
   exportEpochTime = false,
 }
 
-local amtDefaults               = {
+local amtDefaults = {
   useSunday = false,
   addToCutoff = 0,
 }
 
 if LibDebugLogger then
   local logger = LibDebugLogger.Create(AddonName)
-  AMT.logger   = logger
+  AMT.logger = logger
 end
 local SDLV = DebugLogViewer
 if SDLV then AMT.viewer = true else AMT.viewer = false end
@@ -91,7 +92,6 @@ local function create_log(log_type, log_content)
     CHAT_ROUTER:AddSystemMessage(log_content)
     return
   end
-  if not AMT.logger then return end
   if log_type == "Debug" then
     AMT.logger:Debug(log_content)
   end
@@ -114,7 +114,7 @@ local function emit_message(log_type, text)
 end
 
 local function emit_table(log_type, t, indent, table_history)
-  indent        = indent or "."
+  indent = indent or "."
   table_history = table_history or {}
 
   for k, v in pairs(t) do
@@ -144,7 +144,7 @@ function AMT:dm(log_type, ...)
   end
 end
 
-local langStrings                                           = {
+local langStrings = {
   en = {
     member = "Member for %s %s",
     sinceLogoff = "Offline for %s %s",
@@ -197,20 +197,20 @@ local langStrings                                           = {
 
 -- Hooked functions
 local org_ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter = ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter
-local org_ZO_KeyboardGuildRosterRowDisplayName_OnMouseExit  = ZO_KeyboardGuildRosterRowDisplayName_OnMouseExit
+local org_ZO_KeyboardGuildRosterRowDisplayName_OnMouseExit = ZO_KeyboardGuildRosterRowDisplayName_OnMouseExit
 
 local function secToTime(timeframe)
-  local outputString  = ""
+  local outputString = ""
   local nextTimeframe = 0
-  local years         = math.floor(math.modf(timeframe / 31540000))
-  nextTimeframe       = timeframe - (years * 31540000)
-  local days          = math.floor(math.modf(nextTimeframe / 86400))
-  nextTimeframe       = timeframe - (years * 31540000) - (days * 86400)
-  local hours         = math.floor(math.modf(nextTimeframe / 3600))
-  nextTimeframe       = timeframe - (years * 31540000) - (days * 86400) - (hours * 3600)
-  local minutes       = math.floor(math.modf(nextTimeframe / 60))
-  nextTimeframe       = timeframe - (years * 31540000) - (days * 86400) - (hours * 3600) - (minutes * 60)
-  local seconds       = nextTimeframe
+  local years = math.floor(math.modf(timeframe / 31540000))
+  nextTimeframe = timeframe - (years * 31540000)
+  local days = math.floor(math.modf(nextTimeframe / 86400))
+  nextTimeframe = timeframe - (years * 31540000) - (days * 86400)
+  local hours = math.floor(math.modf(nextTimeframe / 3600))
+  nextTimeframe = timeframe - (years * 31540000) - (days * 86400) - (hours * 3600)
+  local minutes = math.floor(math.modf(nextTimeframe / 60))
+  nextTimeframe = timeframe - (years * 31540000) - (days * 86400) - (hours * 3600) - (minutes * 60)
+  local seconds = nextTimeframe
 
   if years > 0 then
     outputString = outputString .. string.format("%s y ", years)
@@ -231,22 +231,44 @@ local function secToTime(timeframe)
   return outputString
 end
 
+local function TrimTagString(str)
+  local stringTrimmed = string.gsub(str, '{t:', '')
+  stringTrimmed = string.gsub(stringTrimmed, '}', '')
+  return stringTrimmed
+end
+
+local function BuildTagsTable(str)
+  local t = {}
+  local function helper(line)
+    if line ~= "" then
+      t[line] = true
+    end
+    return ""
+  end
+  helper((str:gsub("(.-)&&", helper)))
+  if next(t) then return t end
+end
+
 function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
+  local tagTable = {}
   org_ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
 
-  local parent      = control:GetParent()
-  local data        = ZO_ScrollList_GetData(parent)
-  local guildId     = GUILD_SELECTOR.guildId
-  local guildName   = GetGuildName(guildId) -- must be this case here
+  local parent = control:GetParent()
+  local data = ZO_ScrollList_GetData(parent)
+  if data and data.note then tagTable = BuildTagsTable(TrimTagString(data.note)) end
+  --AMT:dm("Debug", tagTable)
+  local guildId = GUILD_SELECTOR.guildId
+  local viewDepositWithdraws = DoesPlayerHaveGuildPermission(guildId, GUILD_PERMISSION_BANK_VIEW_DEPOSIT_HISTORY) or DoesPlayerHaveGuildPermission(guildId, GUILD_PERMISSION_BANK_VIEW_WITHDRAW_HISTORY)
+  local guildName = GetGuildName(guildId) -- must be this case here
   local foundedDate = AMT:GetGuildFoundedDate(guildId)
   local displayName = string.lower(data.displayName)
-  local timeStamp   = GetTimeStamp()
+  local timeStamp = GetTimeStamp()
   local foundDisplayName, secsSinceLogoff
   for member = 1, GetNumGuildMembers(guildId), 1 do
-    secsSinceLogoff                            = -1
-    foundDisplayName                           = ""
+    secsSinceLogoff = -1
+    foundDisplayName = ""
     foundDisplayName, _, _, _, secsSinceLogoff = GetGuildMemberInfo(guildId, member)
-    foundDisplayName                           = string.lower(foundDisplayName)
+    foundDisplayName = string.lower(foundDisplayName)
     if displayName == foundDisplayName then
       secsSinceLogoff = AMT:DetermineSecondsSinceLogoff(secsSinceLogoff, foundedDate, displayName)
       break
@@ -261,48 +283,65 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
       tooltip = tooltip .. "\n\n"
 
       if (AMT.savedData[guildName][displayName].timeJoined == 0) then
-        str     = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL])
+        str = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL])
         tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["member"], "> ", str) .. "\n"
       else
-        str     = secToTime(timeStamp - AMT.savedData[guildName][displayName].timeJoined)
+        str = secToTime(timeStamp - AMT.savedData[guildName][displayName].timeJoined)
         tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["member"], "", str) .. "\n"
       end
 
       if AMT.savedData[guildName][displayName].playerStatusOnline then
-        tooltip = tooltip .. "Player: Online" .. "\n\n"
+        tooltip = tooltip .. "Player: Online"
+        if viewDepositWithdraws then
+          tooltip = tooltip .. "\n\n"
+        end
       else
-        str     = secToTime(secsSinceLogoff)
-        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["sinceLogoff"], "", str) .. "\n\n"
+        str = secToTime(secsSinceLogoff)
+        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["sinceLogoff"], "", str)
+        if viewDepositWithdraws then
+          tooltip = tooltip .. "\n\n"
+        end
       end
 
-      tooltip = tooltip .. langStrings[AMT.effective_lang]["depositions"] .. ':' .. "\n"
-      if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast == 0) then
-        str = secToTime(AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast)
-      else
-        oldest    = AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast
-        timeframe = timeStamp - oldest
-        str       = secToTime(timeframe)
+      if viewDepositWithdraws then
+        tooltip = tooltip .. langStrings[AMT.effective_lang]["depositions"] .. ':' .. "\n"
+        if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast == 0) then
+          str = secToTime(AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast)
+        else
+          oldest = AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast
+          timeframe = timeStamp - oldest
+          str = secToTime(timeframe)
+        end
+        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["total"],
+          AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].total, str) .. "\n"
+
+        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["last"],
+          AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].last, str) .. "\n\n"
+
+        tooltip = tooltip .. langStrings[AMT.effective_lang]["withdrawals"] .. ':' .. "\n"
+        if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast == 0) then
+          str = secToTime(AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast)
+        else
+          oldest = AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast
+          timeframe = timeStamp - oldest
+          str = secToTime(timeframe)
+        end
+
+        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["total"],
+          AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].total, str) .. "\n"
+
+        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["last"],
+          AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].last, str) .. "\n"
+      end -- end viewDepositWithdraws
+
+      if tagTable and tagTable["gd"] then
+        tooltip = tooltip .. "Deposited Weekly gold" .. "\n"
       end
-      tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["total"],
-        AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].total, str) .. "\n"
 
-      tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["last"],
-        AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].last, str) .. "\n\n"
-
-      tooltip = tooltip .. langStrings[AMT.effective_lang]["withdrawals"] .. ':' .. "\n"
-      if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast == 0) then
-        str = secToTime(AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast)
-      else
-        oldest    = AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast
-        timeframe = timeStamp - oldest
-        str       = secToTime(timeframe)
+      if tagTable and tagTable["sm"] then
+        tooltip = tooltip .. "Weekly Sales Met"
       end
 
-      tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["total"],
-        AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].total, str) .. "\n"
-
-      tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["last"],
-        AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].last, str)
     end
   end
 
@@ -349,20 +388,20 @@ end
 function AMT:createUser(guildName, displayName)
   if AMT.savedData[guildName] == nil then AMT.savedData[guildName] = {} end
   if (AMT.savedData[guildName][displayName] == nil) then
-    AMT.savedData[guildName][displayName]                                         = {}
-    AMT.savedData[guildName][displayName].timeJoined                              = 0
-    AMT.savedData[guildName][displayName].playerStatusOnline                      = false
-    AMT.savedData[guildName][displayName].playerStatusOffline                     = false
-    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED]             = {}
-    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeFirst   = 0
-    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast    = 0
-    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].last        = 0
-    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].total       = 0
-    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED]           = {}
+    AMT.savedData[guildName][displayName] = {}
+    AMT.savedData[guildName][displayName].timeJoined = 0
+    AMT.savedData[guildName][displayName].playerStatusOnline = false
+    AMT.savedData[guildName][displayName].playerStatusOffline = false
+    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED] = {}
+    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeFirst = 0
+    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast = 0
+    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].last = 0
+    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].total = 0
+    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED] = {}
     AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeFirst = 0
-    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast  = 0
-    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].last      = 0
-    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].total     = 0
+    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast = 0
+    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].last = 0
+    AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].total = 0
   end
 end
 
@@ -371,12 +410,12 @@ function AMT.resetUser(guildName, displayName)
   if (AMT.savedData[guildName][displayName] == nil) then
     AMT:createUser(guildName, displayName)
   end
-  AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast   = 0
-  AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].last       = 0
-  AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].total      = 0
+  AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast = 0
+  AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].last = 0
+  AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].total = 0
   AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast = 0
-  AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].last     = 0
-  AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].total    = 0
+  AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].last = 0
+  AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].total = 0
 end
 
 function AMT.processListenerEvent(guildId, category, theEvent)
@@ -388,8 +427,8 @@ function AMT.processListenerEvent(guildId, category, theEvent)
 
   -- seemed to be correct but later gives odd result
   -- local timeStamp = GetTimeStamp() - theEvent.evTime
-  local timeStamp   = theEvent.evTime
-  local guildName   = GetGuildName(guildId)
+  local timeStamp = theEvent.evTime
+  local guildName = GetGuildName(guildId)
   local displayName = string.lower(theEvent.evName)
 
   if AMT.savedData[guildName]["oldestEvents"][category] == 0 or AMT.savedData[guildName]["oldestEvents"][category] > timeStamp then AMT.savedData[guildName]["oldestEvents"][category] = timeStamp end
@@ -403,8 +442,8 @@ function AMT.processListenerEvent(guildId, category, theEvent)
 
   if (category == GUILD_HISTORY_BANK) and (theEvent.evTime > weekStart) then
     if (theEvent.evType == GUILD_EVENT_BANKGOLD_ADDED) or (theEvent.evType == GUILD_EVENT_BANKGOLD_REMOVED) then
-      AMT.savedData[guildName][displayName][theEvent.evType].total    = AMT.savedData[guildName][displayName][theEvent.evType].total + theEvent.evGold
-      AMT.savedData[guildName][displayName][theEvent.evType].last     = theEvent.evGold
+      AMT.savedData[guildName][displayName][theEvent.evType].total = AMT.savedData[guildName][displayName][theEvent.evType].total + theEvent.evGold
+      AMT.savedData[guildName][displayName][theEvent.evType].last = theEvent.evGold
       AMT.savedData[guildName][displayName][theEvent.evType].timeLast = timeStamp
       --AMT:dm("Debug", "Bank Event")
 
@@ -424,7 +463,7 @@ function AMT:SetupListener(guildId)
   -- systemSavedVariables
   -- listener
   AMT.LibHistoireGeneralListener[guildId] = LGH:CreateGuildHistoryListener(guildId, GUILD_HISTORY_GENERAL)
-  AMT.LibHistoireBankListener[guildId]    = LGH:CreateGuildHistoryListener(guildId, GUILD_HISTORY_BANK)
+  AMT.LibHistoireBankListener[guildId] = LGH:CreateGuildHistoryListener(guildId, GUILD_HISTORY_BANK)
   local lastReceivedGeneralEventID
   local lastReceivedBankEventID
 
@@ -435,36 +474,41 @@ function AMT:SetupListener(guildId)
     AMT.LibHistoireGeneralListener[guildId]:SetAfterEventId(lastReceivedGeneralEventID)
   end
 
-  if AMT.savedData["lastReceivedBankEventID"][guildId] then
-    --AMT:dm("Info", string.format("AMT Saved Var: %s, guildId: (%s)", AMT.savedData["lastReceivedBankEventID"][guildId], guildId))
-    lastReceivedBankEventID = StringToId64(AMT.savedData["lastReceivedBankEventID"][guildId]) or "0"
-    --AMT:dm("Info", string.format("lastReceivedBankEventID set to: %s", lastReceivedBankEventID))
-    AMT.LibHistoireBankListener[guildId]:SetAfterEventId(lastReceivedBankEventID)
+  if AMT.libHistoireScanByTimestamp then
+    local setAfterTimestamp = AMT.kioskCycle - (ZO_ONE_DAY_IN_SECONDS * 7)
+    AMT.LibHistoireBankListener[guildId]:SetAfterEventTime(setAfterTimestamp)
+  else
+    if AMT.savedData["lastReceivedBankEventID"][guildId] then
+      --AMT:dm("Info", string.format("AMT Saved Var: %s, guildId: (%s)", AMT.savedData["lastReceivedBankEventID"][guildId], guildId))
+      lastReceivedBankEventID = StringToId64(AMT.savedData["lastReceivedBankEventID"][guildId]) or "0"
+      --AMT:dm("Info", string.format("lastReceivedBankEventID set to: %s", lastReceivedBankEventID))
+      AMT.LibHistoireBankListener[guildId]:SetAfterEventId(lastReceivedBankEventID)
+    end
   end
 
   -- Begin Listener General
   AMT.LibHistoireGeneralListener[guildId]:SetEventCallback(function(eventType, eventId, eventTime, p1, p2, p3, p4, p5, p6)
     if eventType == GUILD_EVENT_GUILD_JOIN then
-      local param1    = p1 or ""
-      local param2    = p2 or ""
-      local param3    = p3 or ""
-      local param4    = p4 or ""
-      local param5    = p5 or ""
-      local param6    = p6 or ""
+      local param1 = p1 or ""
+      local param2 = p2 or ""
+      local param3 = p3 or ""
+      local param4 = p4 or ""
+      local param5 = p5 or ""
+      local param6 = p6 or ""
       local theString = param1 .. param2 .. param3 .. param4 .. param5 .. param6
 
       if not lastReceivedGeneralEventID or CompareId64s(eventId, lastReceivedGeneralEventID) > 0 then
         AMT.savedData["lastReceivedGeneralEventID"][guildId] = Id64ToString(eventId)
-        lastReceivedGeneralEventID                           = eventId
+        lastReceivedGeneralEventID = eventId
       end
-      local theEvent    = {
+      local theEvent = {
         evType = eventType,
         evTime = eventTime,
         evName = p1, -- Username that joined the guild
         evGold = nil, -- because it is when user joined
         eventId = Id64ToString(eventId), -- eventId but new
       }
-      local guildName   = GetGuildName(guildId)
+      local guildName = GetGuildName(guildId)
       local displayName = string.lower(theEvent.evName)
       if not AMT.savedData[guildName][displayName] then AMT:createUser(guildName, displayName) end
       AMT.processListenerEvent(guildId, GUILD_HISTORY_GENERAL, theEvent)
@@ -474,17 +518,17 @@ function AMT:SetupListener(guildId)
   -- Begin Listener Bank
   AMT.LibHistoireBankListener[guildId]:SetEventCallback(function(eventType, eventId, eventTime, p1, p2, p3, p4, p5, p6)
     if (eventType == GUILD_EVENT_BANKGOLD_ADDED or eventType == GUILD_EVENT_BANKGOLD_REMOVED) then
-      local param1    = p1 or ""
-      local param2    = p2 or ""
-      local param3    = p3 or ""
-      local param4    = p4 or ""
-      local param5    = p5 or ""
-      local param6    = p6 or ""
+      local param1 = p1 or ""
+      local param2 = p2 or ""
+      local param3 = p3 or ""
+      local param4 = p4 or ""
+      local param5 = p5 or ""
+      local param6 = p6 or ""
       local theString = param1 .. param2 .. param3 .. param4 .. param5 .. param6
 
       if not lastReceivedBankEventID or CompareId64s(eventId, lastReceivedBankEventID) > 0 then
         AMT.savedData["lastReceivedBankEventID"][guildId] = Id64ToString(eventId)
-        lastReceivedBankEventID                           = eventId
+        lastReceivedBankEventID = eventId
       end
       local theEvent = {
         evType = eventType,
@@ -506,9 +550,9 @@ end
 function AMT:SetupListenerLibHistoire()
   AMT:dm("Debug", "SetupListenerLibHistoire")
   for guildNum = 1, GetNumGuilds() do
-    local guildId                           = GetGuildId(guildNum)
+    local guildId = GetGuildId(guildNum)
     AMT.LibHistoireGeneralListener[guildId] = {}
-    AMT.LibHistoireBankListener[guildId]    = {}
+    AMT.LibHistoireBankListener[guildId] = {}
     AMT:SetupListener(guildId)
   end
 end
@@ -516,67 +560,68 @@ end
 function AMT:KioskFlipListenerSetup()
   if AMT.savedData["CurrentKioskTime"] == AMT.kioskCycle then return end
   AMT:dm("Debug", "KioskFlipListenerSetup")
+  AMT.libHistoireScanByTimestamp = true
   AMT.savedData["CurrentKioskTime"] = AMT.kioskCycle
-  AMT.savedData["EventProcessed"]   = {}
+  AMT.savedData["EventProcessed"] = {}
   for guildNum = 1, GetNumGuilds() do
-    local guildId   = GetGuildId(guildNum)
+    local guildId = GetGuildId(guildNum)
     local guildName = GetGuildName(guildId)
     for member = 1, GetNumGuildMembers(guildId), 1 do
       AMT.resetUser(guildName, string.lower(GetGuildMemberInfo(guildId, member)))
     end
     AMT.LibHistoireGeneralListener[guildId]:Stop()
     AMT.LibHistoireBankListener[guildId]:Stop()
-    AMT.LibHistoireGeneralListener[guildId]  = nil
-    AMT.LibHistoireBankListener[guildId]     = nil
+    AMT.LibHistoireGeneralListener[guildId] = nil
+    AMT.LibHistoireBankListener[guildId] = nil
     AMT.GeneralEventsNeedProcessing[guildId] = true
-    AMT.BankEventsNeedProcessing[guildId]    = true
-    AMT.GeneralTimeEstimated[guildId]        = false
-    AMT.BankTimeEstimated[guildId]           = false
+    AMT.BankEventsNeedProcessing[guildId] = true
+    AMT.GeneralTimeEstimated[guildId] = false
+    AMT.BankTimeEstimated[guildId] = false
   end
 
   for guildNum = 1, GetNumGuilds() do
-    local guildId                                        = GetGuildId(guildNum)
+    local guildId = GetGuildId(guildNum)
     AMT.savedData["lastReceivedGeneralEventID"][guildId] = "0"
-    AMT.savedData["lastReceivedBankEventID"][guildId]    = "0"
+    AMT.savedData["lastReceivedBankEventID"][guildId] = "0"
     AMT:SetupListener(guildId)
   end
   AMT:QueueCheckStatus()
 end
 
 function AMT:ExportGuildStats()
-  local export    = ZO_SavedVars:NewAccountWide('AdvancedMemberTooltip', 1, "EXPORT", {}, nil)
+  local export = ZO_SavedVars:NewAccountWide('AdvancedMemberTooltip', 1, "EXPORT", {}, nil)
 
   local numGuilds = GetNumGuilds()
-  local guildNum  = self.guildNumber
+  local guildNum = self.guildNumber
   if guildNum > numGuilds then
     AMT:dm("Info", "Invalid Guild Number.")
     return
   end
 
-  local guildId   = GetGuildId(guildNum)
+  local guildId = GetGuildId(guildNum)
   local guildName = GetGuildName(guildId)
 
   AMT:dm("Info", "Exporting: " .. guildName)
-  export[guildName]     = {}
-  local list            = export[guildName]
+  export[guildName] = {}
+  local list = export[guildName]
 
   local numGuildMembers = GetNumGuildMembers(guildId)
-  local foundedDate     = AMT:GetGuildFoundedDate(guildId)
+  local foundedDate = AMT:GetGuildFoundedDate(guildId)
   local displayName, secsSinceLogoff
   for guildMemberIndex = 1, numGuildMembers do
     displayName, _, _, _, secsSinceLogoff = GetGuildMemberInfo(guildId, guildMemberIndex)
     -- because it's stored with lower case
-    displayNameKey                        = string.lower(displayName)
-    secsSinceLogoff                       = AMT:DetermineSecondsSinceLogoff(secsSinceLogoff, foundedDate,
+    displayNameKey = string.lower(displayName)
+    secsSinceLogoff = AMT:DetermineSecondsSinceLogoff(secsSinceLogoff, foundedDate,
       displayName)
     if AMT.savedData[guildName][displayNameKey] then
 
-      local amountDeposited  = AMT.savedData[guildName][displayNameKey][GUILD_EVENT_BANKGOLD_ADDED].total or 0
+      local amountDeposited = AMT.savedData[guildName][displayNameKey][GUILD_EVENT_BANKGOLD_ADDED].total or 0
       local amountWithdrawan = AMT.savedData[guildName][displayNameKey][GUILD_EVENT_BANKGOLD_REMOVED].total or 0
-      local timeJoined       = AMT.savedData[guildName][displayNameKey].timeJoined or 0
-      local timeStamp        = GetTimeStamp()
+      local timeJoined = AMT.savedData[guildName][displayNameKey].timeJoined or 0
+      local timeStamp = GetTimeStamp()
       local timeStringOutput = ""
-      local lastSeenString   = ""
+      local lastSeenString = ""
 
       if (timeJoined == 0) then
         local timeString = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL])
@@ -586,12 +631,12 @@ function AMT:ExportGuildStats()
         timeStringOutput = string.format(" = %s %s", "", timeString)
       end
 
-      local str      = secToTime(secsSinceLogoff)
+      local str = secToTime(secsSinceLogoff)
       lastSeenString = string.format("%s", str)
 
       if AMT.savedData.exportEpochTime then
         timeStringOutput = "&" .. AMT.savedData[guildName][displayNameKey].timeJoined
-        lastSeenString   = timeStamp - secsSinceLogoff
+        lastSeenString = timeStamp - secsSinceLogoff
         if timeJoined == 0 then
           --[[Until I figure out something better if the guild history
           does not go back far enough their timeJoined is 0. So show
@@ -613,14 +658,14 @@ end
 -- /script d(AMT.LibHistoireListener[622389]:GetPendingEventMetrics())
 function AMT:CheckStatus()
   for guildNum = 1, GetNumGuilds() do
-    local guildId                                                    = GetGuildId(guildNum)
-    local numGeneralEvents                                           = GetNumGuildEvents(guildId, GUILD_HISTORY_GENERAL)
-    local numBankEvents                                              = GetNumGuildEvents(guildId, GUILD_HISTORY_BANK)
+    local guildId = GetGuildId(guildNum)
+    local numGeneralEvents = GetNumGuildEvents(guildId, GUILD_HISTORY_GENERAL)
+    local numBankEvents = GetNumGuildEvents(guildId, GUILD_HISTORY_BANK)
     local eventGeneralCount, processingGeneralSpeed, timeLeftGeneral = AMT.LibHistoireGeneralListener[guildId]:GetPendingEventMetrics()
-    local eventBankCount, processingBankSpeed, timeLeftBank          = AMT.LibHistoireBankListener[guildId]:GetPendingEventMetrics()
+    local eventBankCount, processingBankSpeed, timeLeftBank = AMT.LibHistoireBankListener[guildId]:GetPendingEventMetrics()
 
-    timeLeftGeneral                                                  = math.floor(timeLeftGeneral)
-    timeLeftBank                                                     = math.floor(timeLeftBank)
+    timeLeftGeneral = math.floor(timeLeftGeneral)
+    timeLeftBank = math.floor(timeLeftBank)
 
     if timeLeftGeneral ~= -1 or processingGeneralSpeed ~= -1 then AMT.GeneralTimeEstimated[guildId] = true end
     if timeLeftBank ~= -1 or processingBankSpeed ~= -1 then AMT.BankTimeEstimated[guildId] = true end
@@ -645,31 +690,33 @@ end
 function AMT:QueueCheckStatus()
   local eventsRemaining = AMT:CheckStatus()
   if eventsRemaining then
-    zo_callLater(function() AMT:QueueCheckStatus() end, 60000) -- 60000 1 minute
+    zo_callLater(function() AMT:QueueCheckStatus() end, ZO_ONE_MINUTE_IN_MILLISECONDS)
     AMT:dm("Info", "LibHistoire AMT Refresh Not Finished Yet")
   else
     AMT:dm("Info", "LibHistoire AMT Refresh Finished")
+    AMT.libHistoireScanByTimestamp = false
   end
 end
 
 function AMT:DoRefresh()
   AMT:dm("Info", 'LibHistoire refreshing AMT...')
+  AMT.libHistoireScanByTimestamp = true
   numGuilds = GetNumGuilds()
   for guildNum = 1, numGuilds do
     local guildId = GetGuildId(guildNum)
     AMT.LibHistoireGeneralListener[guildId]:Stop()
     AMT.LibHistoireBankListener[guildId]:Stop()
-    AMT.LibHistoireGeneralListener[guildId]  = nil
-    AMT.LibHistoireBankListener[guildId]     = nil
+    AMT.LibHistoireGeneralListener[guildId] = nil
+    AMT.LibHistoireBankListener[guildId] = nil
     AMT.GeneralEventsNeedProcessing[guildId] = true
-    AMT.BankEventsNeedProcessing[guildId]    = true
-    AMT.GeneralTimeEstimated[guildId]        = false
-    AMT.BankTimeEstimated[guildId]           = false
+    AMT.BankEventsNeedProcessing[guildId] = true
+    AMT.GeneralTimeEstimated[guildId] = false
+    AMT.BankTimeEstimated[guildId] = false
   end
   for guildNum = 1, numGuilds do
-    local guildId                                        = GetGuildId(guildNum)
+    local guildId = GetGuildId(guildNum)
     AMT.savedData["lastReceivedGeneralEventID"][guildId] = "0"
-    AMT.savedData["lastReceivedBankEventID"][guildId]    = "0"
+    AMT.savedData["lastReceivedBankEventID"][guildId] = "0"
     AMT:SetupListener(guildId)
   end
   AMT:QueueCheckStatus()
@@ -700,12 +747,12 @@ function get_formatted_date_parts(date_str, date_format)
       use_month_names = false
     end
 
-    d           = string.find(date_format, "dd")
-    m           = string.find(date_format, "mm")
-    y           = string.find(date_format, "yy")
+    d = string.find(date_format, "dd")
+    m = string.find(date_format, "mm")
+    y = string.find(date_format, "yy")
 
-    arr         = { { pos = y, b = "yy" }, { pos = m, b = "mm" }, { pos = d, b = "dd" } }
-    arr         = table_sort(arr, "pos")
+    arr = { { pos = y, b = "yy" }, { pos = m, b = "mm" }, { pos = d, b = "dd" } }
+    arr = table_sort(arr, "pos")
 
     date_format = string.gsub(date_format, "yyyy", "(%%d+)")
     date_format = string.gsub(date_format, "mmm", "(%%a+)")
@@ -715,7 +762,7 @@ function get_formatted_date_parts(date_str, date_format)
     date_format = string.gsub(date_format, " ", "%%s")
   else
     date_format = "(%d+)-(%d+)-(%d+)"
-    arr         = { { pos = 1, b = "yy" }, { pos = 2, b = "mm" }, { pos = 3, b = "dd" } }
+    arr = { { pos = 1, b = "yy" }, { pos = 2, b = "mm" }, { pos = 3, b = "dd" } }
   end
 
   if (date_str and date_str ~= "") then
@@ -725,9 +772,9 @@ function get_formatted_date_parts(date_str, date_format)
   end
 
   arr = table_sort(arr, "b")
-  yy  = arr[3].c
-  mm  = arr[2].c
-  dd  = arr[1].c
+  yy = arr[3].c
+  mm = arr[2].c
+  dd = arr[1].c
 
   if (use_month_names) then
 
@@ -751,9 +798,9 @@ function get_formatted_date_parts(date_str, date_format)
 end
 
 function AMT:GetGuildFoundedDate(guildId)
-  local dateString       = GetGuildFoundedDate(guildId)
+  local dateString = GetGuildFoundedDate(guildId)
   local day, month, year = get_formatted_date_parts(dateString, "dd.mm.yy")
-  local epochTime        = os.time { year = year, month = month, day = day, hour = 0 }
+  local epochTime = os.time { year = year, month = month, day = day, hour = 0 }
   if not year then
     epochTime = 1396594800 -- ESO Launch
   end
@@ -762,13 +809,13 @@ end
 
 function AMT:DetermineSecondsSinceLogoff(secsSinceLogoff, foundedDate, displayName)
   local somethingDone = false
-  local resultNum     = secsSinceLogoff
+  local resultNum = secsSinceLogoff
   if secsSinceLogoff > foundedDate then
     --AMT:dm("Debug", "secsSinceLogoff > foundedDate")
     --AMT:dm("Debug", displayName)
     --AMT:dm("Debug", secsSinceLogoff)
     --AMT:dm("Debug", foundedDate)
-    resultNum     = GetTimeStamp() - secsSinceLogoff
+    resultNum = GetTimeStamp() - secsSinceLogoff
     somethingDone = true
   end
   --[[ if the sec is more then 1577836800 or Wednesday, January 1, 2020
@@ -779,7 +826,7 @@ function AMT:DetermineSecondsSinceLogoff(secsSinceLogoff, foundedDate, displayNa
     --AMT:dm("Debug", displayName)
     --AMT:dm("Debug", secsSinceLogoff)
     --AMT:dm("Debug", foundedDate)
-    resultNum     = GetTimeStamp() - secsSinceLogoff
+    resultNum = GetTimeStamp() - secsSinceLogoff
     somethingDone = true
   end
   if not somethingDone then
@@ -795,14 +842,14 @@ function AMT:UpdatePlayerStatusLastSeen()
   AMT:dm("Debug", "UpdatePlayerStatusLastSeen")
   local displayName, playerStatus, secsSinceLogoff
   for guildNum = 1, GetNumGuilds() do
-    local guildId     = GetGuildId(guildNum)
-    local guildName   = GetGuildName(guildId)
+    local guildId = GetGuildId(guildNum)
+    local guildName = GetGuildName(guildId)
     local foundedDate = AMT:GetGuildFoundedDate(guildId)
     for member = 1, GetNumGuildMembers(guildId), 1 do
       displayName, _, _, playerStatus, secsSinceLogoff = GetGuildMemberInfo(guildId, member)
       -- because it's stored with lower case names
-      displayName                                      = string.lower(displayName)
-      secsSinceLogoff                                  = AMT:DetermineSecondsSinceLogoff(secsSinceLogoff,
+      displayName = string.lower(displayName)
+      secsSinceLogoff = AMT:DetermineSecondsSinceLogoff(secsSinceLogoff,
         foundedDate, displayName)
       if AMT.savedData[guildName][displayName] == nil then AMT:createUser(guildName, displayName) end
       if AMT.savedData[guildName][displayName].playerStatusOffline == nil then AMT.savedData[guildName][displayName].playerStatusOffline = false end
@@ -815,12 +862,12 @@ function AMT:UpdatePlayerStatusLastSeen()
       end
 
       if playerStatus == PLAYER_STATUS_ONLINE or playerStatus == PLAYER_STATUS_DO_NOT_DISTURB or playerStatus == PLAYER_STATUS_AWAY then
-        AMT.savedData[guildName][displayName].playerStatusOnline  = true
+        AMT.savedData[guildName][displayName].playerStatusOnline = true
         AMT.savedData[guildName][displayName].playerStatusOffline = false
       end
       if playerStatus == PLAYER_STATUS_OFFLINE then
         AMT.savedData[guildName][displayName].playerStatusOffline = true
-        AMT.savedData[guildName][displayName].playerStatusOnline  = false
+        AMT.savedData[guildName][displayName].playerStatusOnline = false
       end
     end
   end
@@ -828,24 +875,24 @@ end
 
 function OnStatusChanged(eventCode, guildId, displayName, oldStatus, newStatus)
   local guildName = GetGuildName(guildId)
-  local name      = string.lower(displayName)
+  local name = string.lower(displayName)
 
   if AMT.savedData[guildName] == nil then AMT.createGuild(guildName) end
   if AMT.savedData[guildName][name] == nil then AMT:createUser(guildName, name) end
 
   if newStatus == PLAYER_STATUS_ONLINE or newStatus == PLAYER_STATUS_DO_NOT_DISTURB or newStatus == PLAYER_STATUS_AWAY then
-    AMT.savedData[guildName][name].playerStatusOnline  = true
+    AMT.savedData[guildName][name].playerStatusOnline = true
     AMT.savedData[guildName][name].playerStatusOffline = false
   end
   if newStatus == PLAYER_STATUS_OFFLINE then
     AMT.savedData[guildName][name].playerStatusOffline = true
-    AMT.savedData[guildName][name].playerStatusOnline  = false
+    AMT.savedData[guildName][name].playerStatusOnline = false
   end
 end
 
 function AMT.ModifySundayTime()
   local modifyStartTime = 0
-  local addHours        = 0
+  local addHours = 0
   if GetWorldName() == "NA Megaserver" then
     modifyStartTime = modifyStartTime + (3600 * 12) -- roll to midnight Tuesday
     modifyStartTime = modifyStartTime + (3600 * 48) -- roll to midnight Sunday
@@ -860,10 +907,10 @@ end
 function AMT.DoSundayTime()
   AMT:dm("Debug", "DoSundayTime")
   local modifyStartTime, addHours = AMT.ModifySundayTime()
-  weekStart                       = weekStart - modifyStartTime
-  weekStart                       = weekStart + addHours
-  weekEnd                         = weekEnd - modifyStartTime
-  weekEnd                         = weekEnd + addHours
+  weekStart = weekStart - modifyStartTime
+  weekStart = weekStart + addHours
+  weekEnd = weekEnd - modifyStartTime
+  weekEnd = weekEnd + addHours
   --[[
   AMT:dm("Info", "weekEnd = weekEnd - modifyStartTime")
   AMT:dm("Info", weekStart)
@@ -872,33 +919,33 @@ function AMT.DoSundayTime()
   AMT:dm("Info", os.date("%c", weekEnd))
   ]]--
 
-  local timeString                = "Cutoff Times: "
-  local timeStart                 = os.date("%c", weekStart)
-  local timeEnd                   = os.date("%c", weekEnd)
+  local timeString = "Cutoff Times: "
+  local timeStart = os.date("%c", weekStart)
+  local timeEnd = os.date("%c", weekEnd)
 
-  timeString                      = timeString .. timeStart .. " / " .. timeEnd
+  timeString = timeString .. timeStart .. " / " .. timeEnd
   AMT:dm("Info", timeString)
 end
 
 function AMT.DoTuesdayTime()
   AMT:dm("Debug", "DoTuesdayTime")
-  weekCutoff       = AMT.kioskCycle
-  weekStart        = weekCutoff - (7 * 86400) -- GetGuildKioskCycleTimes() minus 7 days
-  weekEnd          = weekCutoff -- GetGuildKioskCycleTimes()
+  weekCutoff = AMT.kioskCycle
+  weekStart = weekCutoff - (ZO_ONE_DAY_IN_SECONDS * 7)
+  weekEnd = weekCutoff -- GetGuildKioskCycleTimes()
 
   local timeString = "Cutoff Times: "
-  local timeStart  = os.date("%c", weekStart)
-  local timeEnd    = os.date("%c", weekEnd)
+  local timeStart = os.date("%c", weekStart)
+  local timeEnd = os.date("%c", weekEnd)
 
-  timeString       = timeString .. timeStart .. " / " .. timeEnd
+  timeString = timeString .. timeStart .. " / " .. timeEnd
   if not AMT.savedData.useSunday then AMT:dm("Info", timeString) end
 end
 
 function AMT.Slash(allArgs)
-  local args        = ""
+  local args = ""
   local guildNumber = 0
-  local exp2        = 0
-  local argNum      = 0
+  local exp2 = 0
+  local argNum = 0
   for w in string.gmatch(allArgs, "%w+") do
     argNum = argNum + 1
     if argNum == 1 then args = w end
@@ -1011,7 +1058,7 @@ local function onAddOnLoaded(eventCode, addonName)
   -- Set up /amt as a slash command toggle for the main window
   SLASH_COMMANDS['/amt'] = AMT.Slash
   for guildNum = 1, GetNumGuilds() do
-    local guildId   = GetGuildId(guildNum)
+    local guildId = GetGuildId(guildNum)
     local guildName = GetGuildName(guildId)
     AMT.createGuild(guildName)
     for member = 1, GetNumGuildMembers(guildId), 1 do
