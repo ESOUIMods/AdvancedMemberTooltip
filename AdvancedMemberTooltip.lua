@@ -987,7 +987,7 @@ function AMT:LibAddonInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Sharlikran',
-    version = '2.11',
+    version = '2.13',
     registerForRefresh = true,
     registerForDefaults = true,
   }
