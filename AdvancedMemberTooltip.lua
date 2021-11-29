@@ -73,7 +73,16 @@ local defaultData = {
   useSunday = false,
   addToCutoff = 0,
   exportEpochTime = false,
+  dateTimeFormat = 1,
 }
+local exampleGuildId = nil
+if GetNumGuilds() >= 1 then
+  exampleGuildId = GetGuildId(1)
+end
+AMT.exampleGuildFoundedDate = "1/1/2000"
+if exampleGuildId then AMT.exampleGuildFoundedDate = GetGuildFoundedDate(exampleGuildId) end
+AMT.dateFormats = {"mm.dd.yy", "dd.mm.yy", "yy.dd.mm", "yy.mm.dd", }
+AMT.dateFormatValues = {1, 2, 3, 4}
 
 local amtDefaults = {
   useSunday = false,
@@ -799,7 +808,10 @@ end
 
 function AMT:GetGuildFoundedDate(guildId)
   local dateString = GetGuildFoundedDate(guildId)
-  local day, month, year = get_formatted_date_parts(dateString, "dd.mm.yy")
+  -- AMT:dm("Debug", dateString)
+  local dateFormat = AMT.dateFormats[AMT.savedData.dateTimeFormat]
+  local day, month, year = get_formatted_date_parts(dateString, dateFormat)
+  -- AMT:dm("Debug", string.format("day: %s, month: %s, year: %s", day, month, year))
   local epochTime = os.time { year = year, month = month, day = day, hour = 0 }
   if not year then
     epochTime = 1396594800 -- ESO Launch
@@ -987,7 +999,7 @@ function AMT:LibAddonInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Sharlikran',
-    version = '2.13',
+    version = '2.14',
     registerForRefresh = true,
     registerForDefaults = true,
   }
@@ -996,14 +1008,9 @@ function AMT:LibAddonInit()
   local optionsData = {
     -- Open main window with mailbox scenes
     [1] = {
-      type = 'checkbox',
-      name = "Export in Epoch Time",
-      tooltip = "Export in Epoch Time that the game uses rather then convert the time stamp to text.",
-      getFunc = function() return AMT.savedData.exportEpochTime end,
-      setFunc = function(value)
-        AMT.savedData.exportEpochTime = value
-      end,
-      default = amtDefaults.exportEpochTime,
+      type = "header",
+      name = "Cutoff Options",
+      width = "full",
     },
     [2] = {
       type = 'checkbox',
@@ -1038,8 +1045,49 @@ function AMT:LibAddonInit()
     [4] = {
       type = "description",
       title = "Note",
-      text = "Use /amt refresh if you change this setting",
+      text = "Use /amt refresh if you change the cutoff times",
       width = "full",
+    },
+    [5] = {
+      type = "header",
+      name = "Time and Date Format",
+      width = "full",
+    },
+    [6] = {
+      type = "description",
+      title = "Guild Creation Date",
+      text = AMT.exampleGuildFoundedDate .. "\nUse the date shown to choose the proper date format below.",
+      width = "full",
+    },
+    [7] = {
+      type = "dropdown",
+      name = "Format",
+      choices = AMT.dateFormats,
+      choicesValues = AMT.dateFormatValues,
+      getFunc = function() return AMT.savedData.dateTimeFormat end,
+      setFunc = function(value) AMT.savedData.dateTimeFormat = value end,
+      default = defaultData.dateTimeFormat,
+    },
+    [8] = {
+      type = "description",
+      title = "Note",
+      text = "The date format is used to convert the founded date of the guild to an alternate format. This only effects the time used when a guild member doesn't have a join date.",
+      width = "full",
+    },
+    [9] = {
+      type = "header",
+      name = "Export Options",
+      width = "full",
+    },
+    [10] = {
+      type = 'checkbox',
+      name = "Export in Epoch Time",
+      tooltip = "Export in Epoch Time that the game uses rather then convert the time stamp to text.",
+      getFunc = function() return AMT.savedData.exportEpochTime end,
+      setFunc = function(value)
+        AMT.savedData.exportEpochTime = value
+      end,
+      default = amtDefaults.exportEpochTime,
     },
   }
 
