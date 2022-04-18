@@ -999,7 +999,7 @@ function AMT:LibAddonInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Sharlikran',
-    version = '2.14',
+    version = '2.15',
     registerForRefresh = true,
     registerForDefaults = true,
   }
