@@ -668,6 +668,7 @@ end
 function AMT:CheckStatus()
   for guildNum = 1, GetNumGuilds() do
     local guildId = GetGuildId(guildNum)
+    local guildName = GetGuildName(guildId)
     local numGeneralEvents = GetNumGuildEvents(guildId, GUILD_HISTORY_GENERAL)
     local numBankEvents = GetNumGuildEvents(guildId, GUILD_HISTORY_BANK)
     local eventGeneralCount, processingGeneralSpeed, timeLeftGeneral = AMT.LibHistoireGeneralListener[guildId]:GetPendingEventMetrics()
@@ -679,14 +680,25 @@ function AMT:CheckStatus()
     if timeLeftGeneral ~= -1 or processingGeneralSpeed ~= -1 then AMT.GeneralTimeEstimated[guildId] = true end
     if timeLeftBank ~= -1 or processingBankSpeed ~= -1 then AMT.BankTimeEstimated[guildId] = true end
 
-    if (timeLeftGeneral == -1 and eventGeneralCount == 1 and numGeneralEvents == 0) and AMT.GeneralTimeEstimated[guildId] then AMT.GeneralEventsNeedProcessing[guildId] = false end
-    if (timeLeftBank == -1 and eventBankCount == 1 and numBankEvents == 0) and AMT.BankTimeEstimated[guildId] then AMT.BankEventsNeedProcessing[guildId] = false end
+    if (numGeneralEvents == 0 and eventGeneralCount == 1 and processingGeneralSpeed == -1 and timeLeftGeneral == -1) then
+      AMT.GeneralTimeEstimated[guildId] = true
+      AMT.GeneralEventsNeedProcessing[guildId] = false
+    end
+
+    if (numBankEvents == 0 and eventBankCount == 1 and processingBankSpeed == -1 and timeLeftBank == -1) then
+      AMT.BankTimeEstimated[guildId] = true
+      AMT.BankEventsNeedProcessing[guildId] = false
+    end
 
     if eventGeneralCount == 0 and AMT.GeneralTimeEstimated[guildId] then AMT.GeneralEventsNeedProcessing[guildId] = false end
     if eventBankCount == 0 and AMT.BankTimeEstimated[guildId] then AMT.BankEventsNeedProcessing[guildId] = false end
 
     if timeLeftGeneral == 0 and AMT.GeneralTimeEstimated[guildId] then AMT.GeneralEventsNeedProcessing[guildId] = false end
     if timeLeftBank == 0 and AMT.BankTimeEstimated[guildId] then AMT.BankEventsNeedProcessing[guildId] = false end
+    
+    --AMT:dm("Debug", string.format("%s: numGeneralEvents: %s eventCount: %s processingSpeed: %s timeLeft: %s", guildName, numGeneralEvents, eventGeneralCount, processingGeneralSpeed, timeLeftGeneral))
+    --AMT:dm("Debug", string.format("%s: numBankEvents: %s eventBankCount: %s processingBankSpeed: %s timeLeftBank: %s", guildName, numBankEvents, eventBankCount, processingBankSpeed, timeLeftBank))
+
   end
   for guildNum = 1, GetNumGuilds() do
     local guildId = GetGuildId(guildNum)
@@ -999,7 +1011,7 @@ function AMT:LibAddonInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Sharlikran',
-    version = '2.15',
+    version = '2.16',
     registerForRefresh = true,
     registerForDefaults = true,
   }
