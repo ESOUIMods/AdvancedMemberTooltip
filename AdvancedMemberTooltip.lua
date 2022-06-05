@@ -81,8 +81,8 @@ if GetNumGuilds() >= 1 then
 end
 AMT.exampleGuildFoundedDate = "1/1/2000"
 if exampleGuildId then AMT.exampleGuildFoundedDate = GetGuildFoundedDate(exampleGuildId) end
-AMT.dateFormats = {"mm.dd.yy", "dd.mm.yy", "yy.dd.mm", "yy.mm.dd", }
-AMT.dateFormatValues = {1, 2, 3, 4}
+AMT.dateFormats = { "mm.dd.yy", "dd.mm.yy", "yy.dd.mm", "yy.mm.dd", }
+AMT.dateFormatValues = { 1, 2, 3, 4 }
 
 local amtDefaults = {
   useSunday = false,
@@ -153,57 +153,6 @@ function AMT:dm(log_type, ...)
   end
 end
 
-local langStrings = {
-  en = {
-    member = "Member for %s %s",
-    sinceLogoff = "Offline for %s %s",
-    depositions = "Deposits",
-    withdrawals = "Withdrawals",
-    total = "Total: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (over %s)",
-    last = "Last: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (%s ago)",
-    day = "day",
-    hour = "hour",
-    minute = "minute",
-    second = "second",
-  },
-  fr = {
-    member = "Membre pour %s %s",
-    sinceLogoff = "Offline for %s %s",
-    depositions = "Dépôts",
-    withdrawals = "Retraits",
-    total = "Total: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (sur %s)",
-    last = "Dernier: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (%i depuis)",
-    day = "jour",
-    hour = "heure",
-    minute = "minute",
-    second = "second",
-  },
-  de = {
-    member = "Mitglied seit %s %s",
-    sinceLogoff = "Offline for %s %s",
-    depositions = "Einzahlungen",
-    withdrawals = "Auszahlungen",
-    total = "Gesamt: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (innerhalb von %s)",
-    last = "Zuletzt: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (vor %s)",
-    day = "Tag",
-    hour = "Stunde",
-    minute = "Minute",
-    second = "second",
-  },
-  ru = {
-    member = "Member for %s %s",
-    sinceLogoff = "Offline for %s %s",
-    depositions = "Deposits",
-    withdrawals = "Withdrawals",
-    total = "Total: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (over %s)",
-    last = "Last: %i |t16:16:EsoUI/Art/currency/currency_gold.dds|t (%s ago)",
-    day = "day",
-    hour = "hour",
-    minute = "minute",
-    second = "second",
-  },
-}
-
 -- Hooked functions
 local org_ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter = ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter
 local org_ZO_KeyboardGuildRosterRowDisplayName_OnMouseExit = ZO_KeyboardGuildRosterRowDisplayName_OnMouseExit
@@ -222,21 +171,21 @@ local function secToTime(timeframe)
   local seconds = nextTimeframe
 
   if years > 0 then
-    outputString = outputString .. string.format("%s y ", years)
+    outputString = outputString .. string.format(GetString(AMT_DATE_FORMAT_YEARS), years)
   end
   if days > 0 then
-    outputString = outputString .. string.format("%s d ", days)
+    outputString = outputString .. string.format(GetString(AMT_DATE_FORMAT_DAYS), days)
   end
   if hours > 0 then
-    outputString = outputString .. string.format("%s h ", hours)
+    outputString = outputString .. string.format(GetString(AMT_DATE_FORMAT_HOURS), hours)
   end
   if minutes > 0 then
-    outputString = outputString .. string.format("%s m ", minutes)
+    outputString = outputString .. string.format(GetString(AMT_DATE_FORMAT_MINUTES), minutes)
   end
   if seconds > 0 then
-    outputString = outputString .. string.format("%s s", seconds)
+    outputString = outputString .. string.format(GetString(AMT_DATE_FORMAT_SECONDS), seconds)
   end
-  if outputString == "" then outputString = "0 d" end
+  if outputString == "" then outputString = GetString(AMT_DATE_FORMAT_NONE) end
   return outputString
 end
 
@@ -293,27 +242,27 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
 
       if (AMT.savedData[guildName][displayName].timeJoined == 0) then
         str = secToTime(timeStamp - AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL])
-        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["member"], "> ", str) .. "\n"
+        tooltip = tooltip .. zo_strformat(GetString(AMT_MEMBER), "> ", str) .. "\n"
       else
         str = secToTime(timeStamp - AMT.savedData[guildName][displayName].timeJoined)
-        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["member"], "", str) .. "\n"
+        tooltip = tooltip .. zo_strformat(GetString(AMT_MEMBER), "", str) .. "\n"
       end
 
       if AMT.savedData[guildName][displayName].playerStatusOnline then
-        tooltip = tooltip .. "Player: Online"
+        tooltip = tooltip .. GetString(AMT_PLAYER_ONLINE)
         if viewDepositWithdraws then
           tooltip = tooltip .. "\n\n"
         end
       else
         str = secToTime(secsSinceLogoff)
-        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["sinceLogoff"], "", str)
+        tooltip = tooltip .. zo_strformat(GetString(AMT_SINCE_LOGOFF), "", str)
         if viewDepositWithdraws then
           tooltip = tooltip .. "\n\n"
         end
       end
 
       if viewDepositWithdraws then
-        tooltip = tooltip .. langStrings[AMT.effective_lang]["depositions"] .. ':' .. "\n"
+        tooltip = tooltip .. GetString(AMT_DEPOSITS) .. ':' .. "\n"
         if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast == 0) then
           str = secToTime(AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].timeLast)
         else
@@ -321,13 +270,13 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
           timeframe = timeStamp - oldest
           str = secToTime(timeframe)
         end
-        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["total"],
+        tooltip = tooltip .. string.format(GetString(AMT_TOTAL),
           AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].total, str) .. "\n"
 
-        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["last"],
+        tooltip = tooltip .. string.format(GetString(AMT_LAST),
           AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED].last, str) .. "\n\n"
 
-        tooltip = tooltip .. langStrings[AMT.effective_lang]["withdrawals"] .. ':' .. "\n"
+        tooltip = tooltip .. GetString(AMT_WITHDRAWALS) .. ':' .. "\n"
         if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast == 0) then
           str = secToTime(AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].timeLast)
         else
@@ -336,10 +285,10 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
           str = secToTime(timeframe)
         end
 
-        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["total"],
+        tooltip = tooltip .. string.format(GetString(AMT_TOTAL),
           AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].total, str) .. "\n"
 
-        tooltip = tooltip .. string.format(langStrings[AMT.effective_lang]["last"],
+        tooltip = tooltip .. string.format(GetString(AMT_LAST),
           AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED].last, str) .. "\n"
       end -- end viewDepositWithdraws
 
@@ -695,7 +644,7 @@ function AMT:CheckStatus()
 
     if timeLeftGeneral == 0 and AMT.GeneralTimeEstimated[guildId] then AMT.GeneralEventsNeedProcessing[guildId] = false end
     if timeLeftBank == 0 and AMT.BankTimeEstimated[guildId] then AMT.BankEventsNeedProcessing[guildId] = false end
-    
+
     --AMT:dm("Debug", string.format("%s: numGeneralEvents: %s eventCount: %s processingSpeed: %s timeLeft: %s", guildName, numGeneralEvents, eventGeneralCount, processingGeneralSpeed, timeLeftGeneral))
     --AMT:dm("Debug", string.format("%s: numBankEvents: %s eventBankCount: %s processingBankSpeed: %s timeLeftBank: %s", guildName, numBankEvents, eventBankCount, processingBankSpeed, timeLeftBank))
 
@@ -873,8 +822,7 @@ function AMT:UpdatePlayerStatusLastSeen()
       displayName, _, _, playerStatus, secsSinceLogoff = GetGuildMemberInfo(guildId, member)
       -- because it's stored with lower case names
       displayName = string.lower(displayName)
-      secsSinceLogoff = AMT:DetermineSecondsSinceLogoff(secsSinceLogoff,
-        foundedDate, displayName)
+      secsSinceLogoff = AMT:DetermineSecondsSinceLogoff(secsSinceLogoff, foundedDate, displayName)
       if AMT.savedData[guildName][displayName] == nil then AMT:createUser(guildName, displayName) end
       if AMT.savedData[guildName][displayName].playerStatusOffline == nil then AMT.savedData[guildName][displayName].playerStatusOffline = false end
       if AMT.savedData[guildName][displayName].playerStatusOnline == nil then AMT.savedData[guildName][displayName].playerStatusOnline = false end
@@ -1011,7 +959,7 @@ function AMT:LibAddonInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Sharlikran',
-    version = '2.16',
+    version = '2.17',
     registerForRefresh = true,
     registerForDefaults = true,
   }
