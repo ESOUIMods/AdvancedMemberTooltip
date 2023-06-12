@@ -425,9 +425,15 @@ function AMT:createUser(guildName, displayName)
   AMT.savedData[guildName][name][guildBankWithdrawal] = AMT.savedData[guildName][name][guildBankWithdrawal] or {}
 
   -- setup event user info
-  AMT.savedData[guildName][name].timeJoined = AMT.savedData[guildName][name].timeJoined or {}
-  AMT.savedData[guildName][name].playerStatusOnline = AMT.savedData[guildName][name].playerStatusOnline or {}
-  AMT.savedData[guildName][name].playerStatusOffline = AMT.savedData[guildName][name].playerStatusOffline or {}
+  AMT.savedData[guildName][name].timeJoined = AMT.savedData[guildName][name].timeJoined or 0
+  --[[ there was a weird error on EU in line 303
+        str = secToTime(timestamp - memberData.timeJoined)
+        I must not have put a 0 at some point for the user data and it was set
+        to an empty table.
+  ]]--
+  if type(AMT.savedData[guildName][name].timeJoined) ~= 'number' then AMT.savedData[guildName][name].timeJoined = 0 end
+  AMT.savedData[guildName][name].playerStatusOnline = AMT.savedData[guildName][name].playerStatusOnline or false
+  AMT.savedData[guildName][name].playerStatusOffline = AMT.savedData[guildName][name].playerStatusOffline or false
 
   for week = AMT_DATERANGE_TODAY, AMT_DATERANGE_30DAY do
     AMT.savedData[guildName][name][eventGoldAdded][week] = AMT.savedData[guildName][name][eventGoldAdded][week] or {}
@@ -1156,7 +1162,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.21',
+    version = '2.22',
     registerForRefresh = true,
     registerForDefaults = true,
   }
