@@ -59,6 +59,9 @@ AMT.BankEventsNeedProcessing = {}
 AMT.BankTimeEstimated = {}
 AMT.guildDonationsColumn = {}
 AMT.rosterDirty = false
+AMT.selectedGuildBankId = nil
+AMT.selectedGuildBankName = nil
+AMT.slashCommandFullRefresh = false
 
 local weekCutoff = 0
 local todayStart = 0
@@ -256,9 +259,10 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
 
   local parent = control:GetParent()
   local data = ZO_ScrollList_GetData(parent)
+  local applicationPending = GetString(SI_GUILD_INVITED_PLAYER_LOCATION) == data.formattedZone
   local guildId = GUILD_SELECTOR.guildId
-  local viewDepositWithdraws = DoesPlayerHaveGuildPermission(guildId, GUILD_PERMISSION_BANK_VIEW_DEPOSIT_HISTORY) or DoesPlayerHaveGuildPermission(guildId, GUILD_PERMISSION_BANK_VIEW_WITHDRAW_HISTORY)
   local guildName = GetGuildName(guildId) -- must be this case here
+  local viewDepositWithdraws = DoesPlayerHaveGuildPermission(guildId, GUILD_PERMISSION_BANK_VIEW_DEPOSIT_HISTORY) or DoesPlayerHaveGuildPermission(guildId, GUILD_PERMISSION_BANK_VIEW_WITHDRAW_HISTORY)
   local foundedDate = AMT:GetGuildFoundedDate(guildId)
   local oldestGeneralGuildEvent = AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL]
   local hasGeneralGuildEvents = oldestGeneralGuildEvent > 0
@@ -267,7 +271,6 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
   local foundDisplayName, note, rankIndex, playerStatus, secsSinceLogoff
   for member = 1, GetNumGuildMembers(guildId), 1 do
     secsSinceLogoff = -1
-    foundDisplayName = ""
     foundDisplayName, note, rankIndex, playerStatus, secsSinceLogoff = GetGuildMemberInfo(guildId, member)
     foundDisplayName = string.lower(foundDisplayName)
     if displayName == foundDisplayName then
@@ -276,16 +279,20 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
     end
   end
 
-  local tooltip = data.characterName
-  local str, firstDepositStr, recentDepositStr, firstWithdrawalStr, recentWithdrawalStr
+  local tooltip
+  if applicationPending then tooltip = displayName
+  else tooltip = data.characterName end
+  local str
   local oldestDeposit, mostRecentDeposit, oldestTimeframe, mostRecentTimeframe
 
-  if (AMT.savedData[guildName] ~= nil) then
-    if (AMT.savedData[guildName][displayName] ~= nil) then
+  local guildData = AMT.savedData[guildName]
+  if guildData then
+    local memberData = guildData[displayName]
+    if memberData and not applicationPending then
       tooltip = tooltip .. "\n\n"
 
       -- Member For
-      if (AMT.savedData[guildName][displayName].timeJoined == 0) then
+      if memberData.timeJoined == 0 then
         if hasGeneralGuildEvents then
           str = secToTime(timestamp - oldestGeneralGuildEvent)
         else
@@ -293,72 +300,82 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
         end
         tooltip = tooltip .. zo_strformat(GetString(AMT_MEMBER), "> ", str) .. "\n"
       else
-        str = secToTime(timestamp - AMT.savedData[guildName][displayName].timeJoined)
+        str = secToTime(timestamp - memberData.timeJoined)
         tooltip = tooltip .. zo_strformat(GetString(AMT_MEMBER), "", str) .. "\n"
       end
 
       -- Online Offline Status
-      if AMT.savedData[guildName][displayName].playerStatusOnline then
-        tooltip = tooltip .. GetString(AMT_PLAYER_ONLINE)
-        if viewDepositWithdraws then
-          tooltip = tooltip .. "\n\n"
-        end
+      if memberData.playerStatusOnline then
+        tooltip = tooltip .. GetString(AMT_PLAYER_ONLINE) .. "\n\n"
       else
         str = secToTime(secsSinceLogoff)
-        tooltip = tooltip .. zo_strformat(GetString(AMT_SINCE_LOGOFF), "", str)
-        if viewDepositWithdraws then
-          tooltip = tooltip .. "\n\n"
-        end
+        tooltip = tooltip .. zo_strformat(GetString(AMT_SINCE_LOGOFF), "", str) .. "\n\n"
       end
 
-      -- Deposits and Withdrawls, viewDepositWithdraws
+      -- All Deposit info
+      tooltip = tooltip .. GetString(AMT_DEPOSITS) .. ':' .. "\n"
+      local currentPlayer = displayName == string.lower(GetDisplayName())
+      local bankDepositType
       if viewDepositWithdraws then
-        tooltip = tooltip .. GetString(AMT_DEPOSITS) .. ':' .. "\n"
-        -- total deposited string, use timeFirst
-        if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK].timeFirst == 0) then
-          firstDepositStr = "None"
-        else
-          oldestDeposit = AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK].timeFirst
-          oldestTimeframe = timestamp - oldestDeposit
-          firstDepositStr = secToTime(oldestTimeframe)
-        end
-        -- last deposit string, use timeLast
-        if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK].timeLast == 0) then
-          recentDepositStr = "None"
-        else
-          oldestDeposit = AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK].timeLast
-          oldestTimeframe = timestamp - oldestDeposit
-          recentDepositStr = secToTime(oldestTimeframe)
-        end
+        bankDepositType = GUILD_EVENT_BANKGOLD_ADDED
+      else
+        bankDepositType = CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT
+      end
 
-        local totalDepositValue = ZO_LocalizeDecimalNumber(AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK].total)
-        local lastDepositValue = ZO_LocalizeDecimalNumber(AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK].last)
-        tooltip = tooltip .. string.format(GetString(AMT_TOTAL), totalDepositValue, firstDepositStr) .. "\n"
-        tooltip = tooltip .. string.format(GetString(AMT_LAST), lastDepositValue, recentDepositStr) .. "\n\n"
+      local totaltDepositStr, lastDepositStr
+      -- Total Deposits, timeFirst
+      if (memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeFirst == 0) then
+        totaltDepositStr = "None"
+      else
+        oldestDeposit = memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeFirst
+        oldestTimeframe = timestamp - oldestDeposit
+        totaltDepositStr = secToTime(oldestTimeframe)
+      end
 
-        tooltip = tooltip .. GetString(AMT_WITHDRAWALS) .. ':' .. "\n"
-        -- total withdrawals string, use timeFirst
-        if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_THISWEEK].timeFirst == 0) then
-          firstWithdrawalStr = "No recent deposit"
-        else
-          mostRecentDeposit = AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_THISWEEK].timeFirst
-          mostRecentTimeframe = timestamp - mostRecentDeposit
-          firstWithdrawalStr = secToTime(mostRecentTimeframe)
-        end
-        -- last withdrawal string, use timeLast
-        if (AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_THISWEEK].timeLast == 0) then
-          recentWithdrawalStr = "No recent deposit"
-        else
-          mostRecentDeposit = AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_THISWEEK].timeLast
-          mostRecentTimeframe = timestamp - mostRecentDeposit
-          recentWithdrawalStr = secToTime(mostRecentTimeframe)
-        end
+      -- Last Deposits, timeLast
+      if (memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeLast == 0) then
+        lastDepositStr = "None"
+      else
+        oldestDeposit = memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeLast
+        oldestTimeframe = timestamp - oldestDeposit
+        lastDepositStr = secToTime(oldestTimeframe)
+      end
+      local totalDepositValue = ZO_LocalizeDecimalNumber(memberData[bankDepositType][AMT_DATERANGE_THISWEEK].total)
+      local lastDepositValue = ZO_LocalizeDecimalNumber(memberData[bankDepositType][AMT_DATERANGE_THISWEEK].last)
+      tooltip = tooltip .. string.format(GetString(AMT_TOTAL), totalDepositValue, totaltDepositStr) .. "\n"
+      tooltip = tooltip .. string.format(GetString(AMT_LAST), lastDepositValue, lastDepositStr) .. "\n\n"
 
-        local totalWithdrawalValue = ZO_LocalizeDecimalNumber(AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_THISWEEK].total)
-        local lastWithdrawalValue = ZO_LocalizeDecimalNumber(AMT.savedData[guildName][displayName][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_THISWEEK].last)
-        tooltip = tooltip .. string.format(GetString(AMT_TOTAL), totalWithdrawalValue, firstWithdrawalStr) .. "\n"
-        tooltip = tooltip .. string.format(GetString(AMT_LAST), lastWithdrawalValue, recentWithdrawalStr) .. "\n"
-      end -- end viewDepositWithdraws
+      -- All Withdrawal info
+      tooltip = tooltip .. GetString(AMT_WITHDRAWALS) .. ':' .. "\n"
+      if viewDepositWithdraws then
+        bankDepositType = GUILD_EVENT_BANKGOLD_REMOVED
+      else
+        bankDepositType = CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL
+      end
+
+      local totalWithdrawalStr, lastWithdrawalStr
+      -- Total Withdrawals, timeFirst
+      if (memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeFirst == 0) then
+        totalWithdrawalStr = "No recent withdrawals"
+      else
+        mostRecentDeposit = memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeFirst
+        mostRecentTimeframe = timestamp - mostRecentDeposit
+        totalWithdrawalStr = secToTime(mostRecentTimeframe)
+      end
+
+      -- Last Withdrawals, timeLast
+      if (memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeLast == 0) then
+        lastWithdrawalStr = "No recent withdrawals"
+      else
+        mostRecentDeposit = memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeLast
+        mostRecentTimeframe = timestamp - mostRecentDeposit
+        lastWithdrawalStr = secToTime(mostRecentTimeframe)
+      end
+      local totalWithdrawalValue = ZO_LocalizeDecimalNumber(memberData[bankDepositType][AMT_DATERANGE_THISWEEK].total)
+      local lastWithdrawalValue = ZO_LocalizeDecimalNumber(memberData[bankDepositType][AMT_DATERANGE_THISWEEK].last)
+      tooltip = tooltip .. string.format(GetString(AMT_TOTAL), totalWithdrawalValue, totalWithdrawalStr) .. "\n"
+      tooltip = tooltip .. string.format(GetString(AMT_LAST), lastWithdrawalValue, lastWithdrawalStr)
+
     end
   end
 
@@ -383,70 +400,146 @@ function AMT.createGuild(guildName)
 end
 
 function AMT:createUser(guildName, displayName)
+  local eventGoldAdded = GUILD_EVENT_BANKGOLD_ADDED
+  local eventGoldRemoved = GUILD_EVENT_BANKGOLD_REMOVED
+  local guildBankDeposit = CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT
+  local guildBankWithdrawal = CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL
   local name = string.lower(displayName)
   AMT.savedData[guildName] = AMT.savedData[guildName] or {}
   AMT.savedData[guildName][name] = AMT.savedData[guildName][name] or {}
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED] or {}
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED] or {}
+  AMT.savedData[guildName][name][eventGoldAdded] = AMT.savedData[guildName][name][eventGoldAdded] or {}
+  AMT.savedData[guildName][name][eventGoldRemoved] = AMT.savedData[guildName][name][eventGoldRemoved] or {}
 
   --clear old values
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED].timeFirst = nil
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED].timeLast = nil
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED].last = nil
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED].total = nil
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED].timeFirst = nil
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED].timeLast = nil
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED].last = nil
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED].total = nil
+  AMT.savedData[guildName][name][eventGoldAdded].timeFirst = nil
+  AMT.savedData[guildName][name][eventGoldAdded].timeLast = nil
+  AMT.savedData[guildName][name][eventGoldAdded].last = nil
+  AMT.savedData[guildName][name][eventGoldAdded].total = nil
+  AMT.savedData[guildName][name][eventGoldRemoved].timeFirst = nil
+  AMT.savedData[guildName][name][eventGoldRemoved].timeLast = nil
+  AMT.savedData[guildName][name][eventGoldRemoved].last = nil
+  AMT.savedData[guildName][name][eventGoldRemoved].total = nil
 
-  -- set current values
+  -- setup personal guild bank deposit/withdrawal info
+  AMT.savedData[guildName][name][guildBankDeposit] = AMT.savedData[guildName][name][guildBankDeposit] or {}
+  AMT.savedData[guildName][name][guildBankWithdrawal] = AMT.savedData[guildName][name][guildBankWithdrawal] or {}
+
+  -- setup event user info
   AMT.savedData[guildName][name].timeJoined = AMT.savedData[guildName][name].timeJoined or {}
   AMT.savedData[guildName][name].playerStatusOnline = AMT.savedData[guildName][name].playerStatusOnline or {}
   AMT.savedData[guildName][name].playerStatusOffline = AMT.savedData[guildName][name].playerStatusOffline or {}
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK] or {}
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_LASTWEEK] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_LASTWEEK] or {}
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_THISWEEK] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_THISWEEK] or {}
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_LASTWEEK] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_LASTWEEK] or {}
+
   for week = AMT_DATERANGE_TODAY, AMT_DATERANGE_30DAY do
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week] or {}
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week] or {}
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].timeFirst = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].timeFirst or 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].timeLast = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].timeLast or 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].last = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].last or 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].total = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].total or 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].timeFirst = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].timeFirst or 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].timeLast = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].timeLast or 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].last = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].last or 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].total = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].total or 0
+    AMT.savedData[guildName][name][eventGoldAdded][week] = AMT.savedData[guildName][name][eventGoldAdded][week] or {}
+    AMT.savedData[guildName][name][eventGoldRemoved][week] = AMT.savedData[guildName][name][eventGoldRemoved][week] or {}
+    AMT.savedData[guildName][name][guildBankDeposit][week] = AMT.savedData[guildName][name][guildBankDeposit][week] or {}
+    AMT.savedData[guildName][name][guildBankWithdrawal][week] = AMT.savedData[guildName][name][guildBankWithdrawal][week] or {}
+
+    AMT.savedData[guildName][name][eventGoldAdded][week].timeFirst = AMT.savedData[guildName][name][eventGoldAdded][week].timeFirst or 0
+    AMT.savedData[guildName][name][eventGoldAdded][week].timeLast = AMT.savedData[guildName][name][eventGoldAdded][week].timeLast or 0
+    AMT.savedData[guildName][name][eventGoldAdded][week].last = AMT.savedData[guildName][name][eventGoldAdded][week].last or 0
+    AMT.savedData[guildName][name][eventGoldAdded][week].total = AMT.savedData[guildName][name][eventGoldAdded][week].total or 0
+
+    AMT.savedData[guildName][name][eventGoldRemoved][week].timeFirst = AMT.savedData[guildName][name][eventGoldRemoved][week].timeFirst or 0
+    AMT.savedData[guildName][name][eventGoldRemoved][week].timeLast = AMT.savedData[guildName][name][eventGoldRemoved][week].timeLast or 0
+    AMT.savedData[guildName][name][eventGoldRemoved][week].last = AMT.savedData[guildName][name][eventGoldRemoved][week].last or 0
+    AMT.savedData[guildName][name][eventGoldRemoved][week].total = AMT.savedData[guildName][name][eventGoldRemoved][week].total or 0
+
+    AMT.savedData[guildName][name][guildBankDeposit][week].timeFirst = AMT.savedData[guildName][name][guildBankDeposit][week].timeFirst or 0
+    AMT.savedData[guildName][name][guildBankDeposit][week].timeLast = AMT.savedData[guildName][name][guildBankDeposit][week].timeLast or 0
+    AMT.savedData[guildName][name][guildBankDeposit][week].last = AMT.savedData[guildName][name][guildBankDeposit][week].last or 0
+    AMT.savedData[guildName][name][guildBankDeposit][week].total = AMT.savedData[guildName][name][guildBankDeposit][week].total or 0
+
+    AMT.savedData[guildName][name][guildBankWithdrawal][week].timeFirst = AMT.savedData[guildName][name][guildBankWithdrawal][week].timeFirst or 0
+    AMT.savedData[guildName][name][guildBankWithdrawal][week].timeLast = AMT.savedData[guildName][name][guildBankWithdrawal][week].timeLast or 0
+    AMT.savedData[guildName][name][guildBankWithdrawal][week].last = AMT.savedData[guildName][name][guildBankWithdrawal][week].last or 0
+    AMT.savedData[guildName][name][guildBankWithdrawal][week].total = AMT.savedData[guildName][name][guildBankWithdrawal][week].total or 0
   end
 end
 
 function AMT.resetUser(guildName, displayName)
+  local eventGoldAdded = GUILD_EVENT_BANKGOLD_ADDED
+  local eventGoldRemoved = GUILD_EVENT_BANKGOLD_REMOVED
+  local guildBankDeposit = CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT
+  local guildBankWithdrawal = CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL
   local name = string.lower(displayName)
   AMT.savedData[guildName] = AMT.savedData[guildName] or {}
   if (AMT.savedData[guildName][name] == nil) then
     AMT:createUser(guildName, name)
     return
   end
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED] or {}
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED] or {}
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK] or {}
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_LASTWEEK] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_LASTWEEK] or {}
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_THISWEEK] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_THISWEEK] or {}
-  AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_LASTWEEK] = AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][AMT_DATERANGE_LASTWEEK] or {}
+  AMT.savedData[guildName][name][eventGoldAdded] = AMT.savedData[guildName][name][eventGoldAdded] or {}
+  AMT.savedData[guildName][name][eventGoldRemoved] = AMT.savedData[guildName][name][eventGoldRemoved] or {}
+  AMT.savedData[guildName][name][guildBankDeposit] = AMT.savedData[guildName][name][guildBankDeposit] or {}
+  AMT.savedData[guildName][name][guildBankWithdrawal] = AMT.savedData[guildName][name][guildBankWithdrawal] or {}
+
   for week = AMT_DATERANGE_TODAY, AMT_DATERANGE_30DAY do
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].timeFirst = 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].timeLast = 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].last = 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][week].total = 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].timeFirst = 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].timeLast = 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].last = 0
-    AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_REMOVED][week].total = 0
+    AMT.savedData[guildName][name][eventGoldAdded][week] = AMT.savedData[guildName][name][eventGoldAdded][week] or {}
+    AMT.savedData[guildName][name][eventGoldRemoved][week] = AMT.savedData[guildName][name][eventGoldRemoved][week] or {}
+    AMT.savedData[guildName][name][guildBankDeposit][week] = AMT.savedData[guildName][name][guildBankDeposit][week] or {}
+    AMT.savedData[guildName][name][guildBankWithdrawal][week] = AMT.savedData[guildName][name][guildBankWithdrawal][week] or {}
+
+    AMT.savedData[guildName][name][eventGoldAdded][week].timeFirst = 0
+    AMT.savedData[guildName][name][eventGoldAdded][week].timeLast = 0
+    AMT.savedData[guildName][name][eventGoldAdded][week].last = 0
+    AMT.savedData[guildName][name][eventGoldAdded][week].total = 0
+
+    AMT.savedData[guildName][name][eventGoldRemoved][week].timeFirst = 0
+    AMT.savedData[guildName][name][eventGoldRemoved][week].timeLast = 0
+    AMT.savedData[guildName][name][eventGoldRemoved][week].last = 0
+    AMT.savedData[guildName][name][eventGoldRemoved][week].total = 0
+    if not AMT.slashCommandFullRefresh then
+      AMT.savedData[guildName][name][guildBankDeposit][week].timeFirst = 0
+      AMT.savedData[guildName][name][guildBankDeposit][week].timeLast = 0
+      AMT.savedData[guildName][name][guildBankDeposit][week].last = 0
+      AMT.savedData[guildName][name][guildBankDeposit][week].total = 0
+
+      AMT.savedData[guildName][name][guildBankWithdrawal][week].timeFirst = 0
+      AMT.savedData[guildName][name][guildBankWithdrawal][week].timeLast = 0
+      AMT.savedData[guildName][name][guildBankWithdrawal][week].last = 0
+      AMT.savedData[guildName][name][guildBankWithdrawal][week].total = 0
+    end
   end
 end
 
-function AMT.processListenerEvent(guildId, category, theEvent)
+function AMT.ProcessGuildBankDeposit(newValue, oldValue, reason, timestamp)
+  -- AMT:dm("Debug", "ProcessGuildBankDeposit")
+
+  local guildId = GetSelectedGuildBankId()
+  local guildName = GetGuildName(guildId)
+  local displayName = string.lower(GetDisplayName())
+  local depositType = reason
+  local goldAmount
+
+  local function updateGuildBankTotals(weekTimeframe)
+    --AMT:dm("Debug", "updateWithdrawal")
+    if depositType == CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT then goldAmount = oldValue - newValue
+    else goldAmount =  newValue - oldValue end
+    --AMT:dm("Debug", goldAmount)
+    AMT.savedData[guildName][displayName][depositType][weekTimeframe].total = AMT.savedData[guildName][displayName][depositType][weekTimeframe].total + goldAmount
+    AMT.savedData[guildName][displayName][depositType][weekTimeframe].last = goldAmount
+    AMT.savedData[guildName][displayName][depositType][weekTimeframe].timeLast = timestamp
+
+    if (AMT.savedData[guildName][displayName][depositType][weekTimeframe].timeFirst == 0) then
+      AMT.savedData[guildName][displayName][depositType][weekTimeframe].timeFirst = timestamp
+    end
+    AMT.rosterDirty = true
+  end
+
+  if reason == CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT or reason == CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL then
+    -- AMT:dm("Debug", string.format("%s, %s, %s, %s, %s, %s", guildName, displayName, eventType, "weekTimeframe", timestamp))
+    if (timestamp >= todayStart) then updateGuildBankTotals(AMT_DATERANGE_TODAY) end
+    if (timestamp >= yesterdayStart and timestamp < yesterdayEnd) then updateGuildBankTotals(AMT_DATERANGE_YESTERDAY) end
+    if (timestamp >= thisweekStart and timestamp < thisweekEnd) then updateGuildBankTotals(AMT_DATERANGE_THISWEEK) end
+    if (timestamp >= lastweekStart and timestamp < lastweekEnd) then updateGuildBankTotals(AMT_DATERANGE_LASTWEEK) end
+    if (timestamp >= priorweekStart and timestamp < priorweekEnd) then updateGuildBankTotals(AMT_DATERANGE_PRIORWEEK) end
+    if (timestamp >= lastSevenDaysStart) then updateGuildBankTotals(AMT_DATERANGE_7DAY) end
+    if (timestamp >= lastTenDaysStart) then updateGuildBankTotals(AMT_DATERANGE_10DAY) end
+    if (timestamp >= lastThirtyDaysStart) then updateGuildBankTotals(AMT_DATERANGE_30DAY) end
+  end
+end
+
+function AMT.ProcessListenerEvent(guildId, category, theEvent)
   --[[if the event does not exist then set it to true and continue,
   otherwise don't record the same event
 
@@ -561,7 +654,7 @@ function AMT:SetupListener(guildId)
       local guildName = GetGuildName(guildId)
       local displayName = string.lower(theEvent.evName)
       if not AMT.savedData[guildName][displayName] then AMT:createUser(guildName, displayName) end
-      AMT.processListenerEvent(guildId, GUILD_HISTORY_GENERAL, theEvent)
+      AMT.ProcessListenerEvent(guildId, GUILD_HISTORY_GENERAL, theEvent)
     end
   end)
 
@@ -587,7 +680,7 @@ function AMT:SetupListener(guildId)
         evGold = p2, -- The ammount of gold
         eventId = Id64ToString(eventId), -- eventId but new
       }
-      AMT.processListenerEvent(guildId, GUILD_HISTORY_BANK, theEvent)
+      AMT.ProcessListenerEvent(guildId, GUILD_HISTORY_BANK, theEvent)
     end
   end)
 
@@ -631,6 +724,9 @@ function AMT:KioskFlipListenerSetup()
     AMT.GeneralTimeEstimated[guildId] = false
     AMT.BankTimeEstimated[guildId] = false
   end
+  -- if slash command used reset this
+  AMT.slashCommandFullRefresh = false
+
 
   for guildNum = 1, GetNumGuilds() do
     local guildId = GetGuildId(guildNum)
@@ -1046,6 +1142,7 @@ function AMT.Slash(allArgs)
   end
   if args == 'fullrefresh' then
     AMT.savedData["CurrentKioskTime"] = 1396594800
+    AMT.slashCommandFullRefresh = true
     AMT:KioskFlipListenerSetup()
     return
   end
@@ -1059,7 +1156,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.20',
+    version = '2.21',
     registerForRefresh = true,
     registerForDefaults = true,
   }
@@ -1235,12 +1332,21 @@ function AMT:InitRosterChanges()
 
 end
 
-local function OnPlayerJoinedGuild(eventCode, guildId, displayName)
-  --AMT:dm("Debug", "OnPlayerJoinedGuild")
+local function OnGuildMemberAdded(eventCode, guildId, displayName)
+  --AMT:dm("Debug", "OnGuildMemberAdded")
   local guildName = GetGuildName(guildId)
   AMT:createUser(guildName, displayName)
 end
-EVENT_MANAGER:RegisterForEvent(AddonName .. "_JoinedGuild", EVENT_GUILD_MEMBER_ADDED, OnPlayerJoinedGuild)
+EVENT_MANAGER:RegisterForEvent(AddonName .. "_GuildMemberAdded", EVENT_GUILD_MEMBER_ADDED, OnGuildMemberAdded)
+
+local function OnPlayerJoinedGuild(eventCode, guildServerId, characterName, guildId)
+  --AMT:dm("Debug", "OnPlayerJoinedGuild")
+  --AMT:dm("Debug", guildServerId)
+  --AMT:dm("Debug", characterName)
+  --AMT:dm("Debug", GetDisplayName())
+  --AMT:dm("Debug", guildId)
+end
+EVENT_MANAGER:RegisterForEvent(AddonName .. "_JoinedGuild", EVENT_GUILD_SELF_JOINED_GUILD, OnPlayerJoinedGuild)
 
 -- Will be called upon loading the addon
 local function onAddOnLoaded(eventCode, addonName)
@@ -1275,3 +1381,53 @@ local function onAddOnLoaded(eventCode, addonName)
   end
 end
 EVENT_MANAGER:RegisterForEvent(AddonName .. "_AddOnLoaded", EVENT_ADD_ON_LOADED, onAddOnLoaded)
+
+--[[
+local function OnOpenGuildBank(eventCode)
+  AMT:dm("Debug", "OnOpenGuildBank")
+end
+EVENT_MANAGER:RegisterForEvent(AddonName .. "_OpenGuildBank", EVENT_OPEN_GUILD_BANK, OnOpenGuildBank)
+
+local function OnCloseGuildBank(eventCode)
+  AMT:dm("Debug", "OnCloseGuildBank")
+end
+EVENT_MANAGER:RegisterForEvent(AddonName .. "_CloseGuildBank", EVENT_CLOSE_GUILD_BANK, OnCloseGuildBank)
+
+local function OnGuildBankedMoneyUpdate(eventCode, newBankedMoney, oldBankedMoney)
+  AMT:dm("Debug", "OnGuildBankedMoneyUpdate")
+  AMT:dm("Debug", newBankedMoney)
+  AMT:dm("Debug", oldBankedMoney)
+end
+EVENT_MANAGER:RegisterForEvent(AddonName .. "_GuildBankedMoneyUpdate", EVENT_GUILD_BANKED_MONEY_UPDATE, OnGuildBankedMoneyUpdate)
+
+local function OnCloseGuildBank(eventCode)
+  AMT:dm("Debug", "OnCloseGuildBank")
+  AMT.selectedGuildBankId = nil
+  AMT.selectedGuildBankName = nil
+end
+EVENT_MANAGER:RegisterForEvent(AddonName .. "_CloseGuildBank", EVENT_CLOSE_GUILD_BANK, OnCloseGuildBank)
+
+local function OnGuildBankSelected(eventCode, guildId)
+  AMT:dm("Debug", "OnGuildBankSelected")
+  AMT:dm("Debug", guildId)
+  AMT.selectedGuildBankId = guildId
+  AMT.selectedGuildBankName = GetGuildName(guildId)
+  AMT:dm("Debug", AMT.selectedGuildBankName)
+end
+EVENT_MANAGER:RegisterForEvent(AddonName .. "_GuildBankSelected", EVENT_GUILD_BANK_SELECTED, OnGuildBankSelected)
+]]--
+
+local function OnGuildBankTransferError(eventCode, reason)
+  --AMT:dm("Debug", "OnGuildBankTransferError")
+  AMT:dm("Warn", reason)
+end
+EVENT_MANAGER:RegisterForEvent(AddonName .. "_GuildBankTransferError", EVENT_GUILD_BANK_TRANSFER_ERROR, OnGuildBankTransferError)
+
+local function OnCarriedCurrencyUpdate(eventCode, currency, newValue, oldValue, reason, reasonSupplementaryInfo)
+  --AMT:dm("Debug", "OnCarriedCurrencyUpdate")
+  if currency == CURT_MONEY and (reason == CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT or reason == CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL) then
+    local timestamp = GetTimeStamp()
+    AMT.ProcessGuildBankDeposit(newValue, oldValue, reason, timestamp)
+  end
+end
+EVENT_MANAGER:RegisterForEvent(AddonName .. "_CarriedCurrencyUpdate", EVENT_CARRIED_CURRENCY_UPDATE, OnCarriedCurrencyUpdate)
