@@ -93,15 +93,25 @@ local AMT_DATERANGE_30DAY = 8
 
 AMT.savedData = {}
 local defaultData = {
-  lastReceivedGeneralEventID = {},
-  lastReceivedBankEventID = {},
-  EventProcessed = {},
-  CurrentKioskTime = 0,
-  useSunday = false,
   addToCutoff = 0,
   exportEpochTime = false,
   dateTimeFormat = 1,
-  addRosterColumn = true,
+  ["NA Megaserver"] = {
+    CurrentKioskTime = 0,
+    addRosterColumn = true,
+    useSunday = false,
+    lastReceivedGeneralEventID = {},
+    lastReceivedBankEventID = {},
+    EventsProcessed = {},
+  },
+  ["EU Megaserver"] = {
+    CurrentKioskTime = 0,
+    addRosterColumn = true,
+    useSunday = false,
+    lastReceivedGeneralEventID = {},
+    lastReceivedBankEventID = {},
+    EventsProcessed = {},
+  },
 }
 local exampleGuildId = nil
 if GetNumGuilds() >= 1 then
@@ -115,6 +125,9 @@ AMT.dateFormatValues = { 1, 2, 3, 4 }
 local amtDefaults = {
   useSunday = false,
   addToCutoff = 0,
+  addRosterColumn = true,
+  exportEpochTime = false,
+  dateTimeFormat = 1,
 }
 
 AMT.show_log = true
@@ -325,7 +338,7 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
       local totaltDepositStr, lastDepositStr
       -- Total Deposits, timeFirst
       if (memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeFirst == 0) then
-        totaltDepositStr = "None"
+        totaltDepositStr = GetString(AMT_NO_DEPOSITS)
       else
         oldestDeposit = memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeFirst
         oldestTimeframe = timestamp - oldestDeposit
@@ -334,7 +347,7 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
 
       -- Last Deposits, timeLast
       if (memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeLast == 0) then
-        lastDepositStr = "None"
+        lastDepositStr = GetString(AMT_NO_DEPOSITS)
       else
         oldestDeposit = memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeLast
         oldestTimeframe = timestamp - oldestDeposit
@@ -356,7 +369,7 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
       local totalWithdrawalStr, lastWithdrawalStr
       -- Total Withdrawals, timeFirst
       if (memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeFirst == 0) then
-        totalWithdrawalStr = "No recent withdrawals"
+        totalWithdrawalStr = GetString(AMT_NO_WITHDRAWALS)
       else
         mostRecentDeposit = memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeFirst
         mostRecentTimeframe = timestamp - mostRecentDeposit
@@ -365,7 +378,7 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
 
       -- Last Withdrawals, timeLast
       if (memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeLast == 0) then
-        lastWithdrawalStr = "No recent withdrawals"
+        lastWithdrawalStr = GetString(AMT_NO_WITHDRAWALS)
       else
         mostRecentDeposit = memberData[bankDepositType][AMT_DATERANGE_THISWEEK].timeLast
         mostRecentTimeframe = timestamp - mostRecentDeposit
@@ -520,7 +533,7 @@ function AMT.ProcessGuildBankDeposit(newValue, oldValue, reason, timestamp)
   local function updateGuildBankTotals(weekTimeframe)
     --AMT:dm("Debug", "updateWithdrawal")
     if depositType == CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT then goldAmount = oldValue - newValue
-    else goldAmount =  newValue - oldValue end
+    else goldAmount = newValue - oldValue end
     --AMT:dm("Debug", goldAmount)
     AMT.savedData[guildName][displayName][depositType][weekTimeframe].total = AMT.savedData[guildName][displayName][depositType][weekTimeframe].total + goldAmount
     AMT.savedData[guildName][displayName][depositType][weekTimeframe].last = goldAmount
@@ -549,9 +562,9 @@ function AMT.ProcessListenerEvent(guildId, category, theEvent)
   --[[if the event does not exist then set it to true and continue,
   otherwise don't record the same event
 
-  Reset on Kiosk Flip]]--
-  if AMT.savedData["EventProcessed"][theEvent.eventId] == nil then
-    AMT.savedData["EventProcessed"][theEvent.eventId] = true
+  This array is reset on Kiosk Flip]]--
+  if AMT.savedData[GetWorldName()]["EventsProcessed"][theEvent.eventId] == nil then
+    AMT.savedData[GetWorldName()]["EventsProcessed"][theEvent.eventId] = true
   else
     return
   end
@@ -616,9 +629,9 @@ function AMT:SetupListener(guildId)
   local lastReceivedGeneralEventID
   local lastReceivedBankEventID
 
-  if AMT.savedData["lastReceivedGeneralEventID"][guildId] then
-    --AMT:dm("Info", string.format("AMT Saved Var: %s, guildId: (%s)", AMT.savedData["lastReceivedGeneralEventID"][guildId], guildId))
-    lastReceivedGeneralEventID = StringToId64(AMT.savedData["lastReceivedGeneralEventID"][guildId]) or "0"
+  if AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] then
+    --AMT:dm("Info", string.format("AMT Saved Var: %s, guildId: (%s)", AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId], guildId))
+    lastReceivedGeneralEventID = StringToId64(AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId]) or "0"
     --AMT:dm("Info", string.format("lastReceivedGeneralEventID set to: %s", lastReceivedGeneralEventID))
     AMT.LibHistoireGeneralListener[guildId]:SetAfterEventId(lastReceivedGeneralEventID)
   end
@@ -627,9 +640,9 @@ function AMT:SetupListener(guildId)
     local setAfterTimestamp = AMT.kioskCycle - (ZO_ONE_DAY_IN_SECONDS * 14) -- this week and last week
     AMT.LibHistoireBankListener[guildId]:SetAfterEventTime(setAfterTimestamp)
   else
-    if AMT.savedData["lastReceivedBankEventID"][guildId] then
-      --AMT:dm("Info", string.format("AMT Saved Var: %s, guildId: (%s)", AMT.savedData["lastReceivedBankEventID"][guildId], guildId))
-      lastReceivedBankEventID = StringToId64(AMT.savedData["lastReceivedBankEventID"][guildId]) or "0"
+    if AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] then
+      --AMT:dm("Info", string.format("AMT Saved Var: %s, guildId: (%s)", AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId], guildId))
+      lastReceivedBankEventID = StringToId64(AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId]) or "0"
       --AMT:dm("Info", string.format("lastReceivedBankEventID set to: %s", lastReceivedBankEventID))
       AMT.LibHistoireBankListener[guildId]:SetAfterEventId(lastReceivedBankEventID)
     end
@@ -647,7 +660,7 @@ function AMT:SetupListener(guildId)
       local theString = param1 .. param2 .. param3 .. param4 .. param5 .. param6
 
       if not lastReceivedGeneralEventID or CompareId64s(eventId, lastReceivedGeneralEventID) > 0 then
-        AMT.savedData["lastReceivedGeneralEventID"][guildId] = Id64ToString(eventId)
+        AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] = Id64ToString(eventId)
         lastReceivedGeneralEventID = eventId
       end
       local theEvent = {
@@ -676,7 +689,7 @@ function AMT:SetupListener(guildId)
       local theString = param1 .. param2 .. param3 .. param4 .. param5 .. param6
 
       if not lastReceivedBankEventID or CompareId64s(eventId, lastReceivedBankEventID) > 0 then
-        AMT.savedData["lastReceivedBankEventID"][guildId] = Id64ToString(eventId)
+        AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] = Id64ToString(eventId)
         lastReceivedBankEventID = eventId
       end
       local theEvent = {
@@ -707,14 +720,17 @@ function AMT:SetupListenerLibHistoire()
 end
 
 function AMT:KioskFlipListenerSetup()
-  if AMT.savedData["CurrentKioskTime"] == AMT.kioskCycle then
+  local currentKioskTime = AMT.savedData[GetWorldName()]["CurrentKioskTime"]
+  local forceRefresh = AMT.slashCommandFullRefresh
+  local weeklyRefreshComplete = currentKioskTime == AMT.kioskCycle
+  if weeklyRefreshComplete and not forceRefresh then
     AMT:dm("Debug", "Kiosk Reset Week Not Needed")
     return
   end
   AMT:dm("Debug", "KioskFlipListenerSetup")
   AMT.libHistoireScanByTimestamp = true
-  AMT.savedData["CurrentKioskTime"] = AMT.kioskCycle
-  AMT.savedData["EventProcessed"] = {}
+  AMT.savedData[GetWorldName()]["CurrentKioskTime"] = AMT.kioskCycle
+  AMT.savedData[GetWorldName()]["EventsProcessed"] = {}
   for guildNum = 1, GetNumGuilds() do
     local guildId = GetGuildId(guildNum)
     local guildName = GetGuildName(guildId)
@@ -733,11 +749,10 @@ function AMT:KioskFlipListenerSetup()
   -- if slash command used reset this
   AMT.slashCommandFullRefresh = false
 
-
   for guildNum = 1, GetNumGuilds() do
     local guildId = GetGuildId(guildNum)
-    AMT.savedData["lastReceivedGeneralEventID"][guildId] = "0"
-    AMT.savedData["lastReceivedBankEventID"][guildId] = "0"
+    AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] = "0"
+    AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] = "0"
     AMT:SetupListener(guildId)
   end
   AMT:QueueCheckStatus()
@@ -749,14 +764,14 @@ function AMT:ExportGuildStats()
   local numGuilds = GetNumGuilds()
   local guildNum = self.guildNumber
   if guildNum > numGuilds then
-    AMT:dm("Info", "Invalid Guild Number.")
+    AMT:dm("Info", GetString(AMT_INVALID_GUILD_NUMBER))
     return
   end
 
   local guildId = GetGuildId(guildNum)
   local guildName = GetGuildName(guildId)
 
-  AMT:dm("Info", "Exporting: " .. guildName)
+  AMT:dm("Info", GetString(AMT_EXPORTING) .. guildName)
   export[guildName] = {}
   local list = export[guildName]
 
@@ -856,15 +871,15 @@ function AMT:QueueCheckStatus()
   local eventsRemaining = AMT:CheckStatus()
   if eventsRemaining then
     zo_callLater(function() AMT:QueueCheckStatus() end, ZO_ONE_MINUTE_IN_MILLISECONDS)
-    AMT:dm("Info", "LibHistoire AMT Refresh Not Finished Yet")
+    AMT:dm("Info", GetString(AMT_REFRESH_NOT_FINISHED))
   else
-    AMT:dm("Info", "LibHistoire AMT Refresh Finished")
+    AMT:dm("Info", GetString(AMT_REFRESH_FINISHED))
     AMT.libHistoireScanByTimestamp = false
   end
 end
 
 function AMT:DoRefresh()
-  AMT:dm("Info", 'LibHistoire refreshing AMT...')
+  AMT:dm("Info", GetString(AMT_LIBHISTOIRE_REFRESHING))
   AMT.libHistoireScanByTimestamp = true
   local numGuilds = GetNumGuilds()
   for guildNum = 1, numGuilds do
@@ -880,8 +895,8 @@ function AMT:DoRefresh()
   end
   for guildNum = 1, numGuilds do
     local guildId = GetGuildId(guildNum)
-    AMT.savedData["lastReceivedGeneralEventID"][guildId] = "0"
-    AMT.savedData["lastReceivedBankEventID"][guildId] = "0"
+    AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] = "0"
+    AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] = "0"
     AMT:SetupListener(guildId)
   end
   AMT:QueueCheckStatus()
@@ -1112,7 +1127,7 @@ function AMT.DoTuesdayTime()
   local timeEnd = os.date("%c", thisweekEnd)
 
   timeString = timeString .. timeStart .. " / " .. timeEnd
-  if not AMT.savedData.useSunday then AMT:dm("Info", timeString) end
+  if not AMT.savedData[GetWorldName()].useSunday then AMT:dm("Info", timeString) end
 end
 
 function AMT.Slash(allArgs)
@@ -1128,8 +1143,8 @@ function AMT.Slash(allArgs)
   end
   args = string.lower(args)
   if args == "help" or args == "" then
-    AMT:dm("Info", "/amt export <Guild number> - Exports Guild Statistics.")
-    AMT:dm("Info", "/amt refresh - Refresh LibHistoire information without resetting data.")
+    AMT:dm("Info", GetString(AMT_HELP_EXPORT))
+    AMT:dm("Info", GetString(AMT_HELP_REFRESH))
     return
   end
   if args == 'export' then
@@ -1137,8 +1152,8 @@ function AMT.Slash(allArgs)
       AMT.guildNumber = guildNumber
       AMT:ExportGuildStats()
     else
-      AMT:dm("Info", "Please include the guild number you wish to export.")
-      AMT:dm("Info", "For example '/amt export 1' to export guild 1.")
+      AMT:dm("Info", GetString(AMT_HELP_EXPORT_DESC))
+      AMT:dm("Info", GetString(AMT_HELP_EXPORT_EXAMPLE))
     end
     return
   end
@@ -1147,12 +1162,12 @@ function AMT.Slash(allArgs)
     return
   end
   if args == 'fullrefresh' then
-    AMT.savedData["CurrentKioskTime"] = 1396594800
+    -- AMT.savedData["CurrentKioskTime"] = 1396594800
     AMT.slashCommandFullRefresh = true
     AMT:KioskFlipListenerSetup()
     return
   end
-  AMT:dm("Info", string.format("[AMT] %s : is an unrecognized command.", args))
+  AMT:dm("Info", string.format(GetStting(AMT_HELP_INVALID), args))
 end
 
 function AMT:LibAddonMenuInit()
@@ -1162,7 +1177,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.22',
+    version = '2.23',
     registerForRefresh = true,
     registerForDefaults = true,
   }
@@ -1179,14 +1194,14 @@ function AMT:LibAddonMenuInit()
     type = 'checkbox',
     name = GetString(AMT_SUNDAY_CUTOFF_NAME),
     tooltip = GetString(AMT_SUNDAY_CUTOFF_TIP),
-    getFunc = function() return AMT.savedData.useSunday end,
+    getFunc = function() return AMT.savedData[GetWorldName()].useSunday end,
     setFunc = function(value)
-      AMT.savedData.useSunday = value
-      if not AMT.savedData.useSunday then
+      AMT.savedData[GetWorldName()].useSunday = value
+      if not AMT.savedData[GetWorldName()].useSunday then
         AMT.savedData.addToCutoff = 0
       end
       AMT.DoTuesdayTime()
-      if AMT.savedData.useSunday then AMT.DoSundayTime() end
+      if AMT.savedData[GetWorldName()].useSunday then AMT.DoSundayTime() end
     end,
     default = amtDefaults.useSunday,
   }
@@ -1200,10 +1215,10 @@ function AMT:LibAddonMenuInit()
     setFunc = function(value)
       AMT.savedData.addToCutoff = value
       AMT.DoTuesdayTime()
-      if AMT.savedData.useSunday then AMT.DoSundayTime() end
+      if AMT.savedData[GetWorldName()].useSunday then AMT.DoSundayTime() end
     end,
     default = amtDefaults.addToCutoff,
-    disabled = function() return not AMT.savedData.useSunday end,
+    disabled = function() return not AMT.savedData[GetWorldName()].useSunday end,
   }
   optionsData[#optionsData + 1] = {
     type = "description",
@@ -1220,9 +1235,9 @@ function AMT:LibAddonMenuInit()
     type = 'checkbox',
     name = GetString(AMT_DONATIONS_COLUMN_NAME),
     tooltip = GetString(AMT_DONATIONS_COLUMN_TIP),
-    getFunc = function() return AMT.savedData.addRosterColumn end,
+    getFunc = function() return AMT.savedData[GetWorldName()].addRosterColumn end,
     setFunc = function(value)
-      AMT.savedData.addRosterColumn = value
+      AMT.savedData[GetWorldName()].addRosterColumn = value
       AMT.guildDonationsColumn:IsDisabled(not value)
     end,
     default = amtDefaults.addRosterColumn,
@@ -1245,7 +1260,7 @@ function AMT:LibAddonMenuInit()
     choicesValues = AMT.dateFormatValues,
     getFunc = function() return AMT.savedData.dateTimeFormat end,
     setFunc = function(value) AMT.savedData.dateTimeFormat = value end,
-    default = defaultData.dateTimeFormat,
+    default = amtDefaults.dateTimeFormat,
   }
   optionsData[#optionsData + 1] = {
     type = "description",
@@ -1297,7 +1312,7 @@ function AMT:InitRosterChanges()
   -- LibGuildRoster adding the Sold Column
   AMT.guildDonationsColumn = LibGuildRoster:AddColumn({
     key = 'AMT_Donations',
-    disabled = not AMT.savedData.addRosterColumn,
+    disabled = not AMT.savedData[GetWorldName()].addRosterColumn,
     width = 110,
     header = {
       title = "Donations",
@@ -1361,7 +1376,7 @@ local function onAddOnLoaded(eventCode, addonName)
     AMT.savedData = ZO_SavedVars:NewAccountWide("AdvancedMemberTooltip", 1, nil, defaultData)
 
     AMT.DoTuesdayTime()
-    if AMT.savedData.useSunday then AMT.DoSundayTime() end
+    if AMT.savedData[GetWorldName()].useSunday then AMT.DoSundayTime() end
     -- Set up /amt as a slash command toggle for the main window
     SLASH_COMMANDS['/amt'] = AMT.Slash
     for guildNum = 1, GetNumGuilds() do
@@ -1371,8 +1386,8 @@ local function onAddOnLoaded(eventCode, addonName)
       for member = 1, GetNumGuildMembers(guildId), 1 do
         AMT:createUser(guildName, GetGuildMemberInfo(guildId, member))
       end
-      if AMT.savedData["lastReceivedGeneralEventID"][guildId] == nil then AMT.savedData["lastReceivedGeneralEventID"][guildId] = "0" end
-      if AMT.savedData["lastReceivedBankEventID"][guildId] == nil then AMT.savedData["lastReceivedBankEventID"][guildId] = "0" end
+      if AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] == nil then AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] = "0" end
+      if AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] == nil then AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] = "0" end
     end
 
     AMT:LibAddonMenuInit()

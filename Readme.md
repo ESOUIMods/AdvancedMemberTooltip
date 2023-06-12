@@ -44,6 +44,14 @@ For Mac: ~/Documents/Elder Scrolls Online/live/
 
 # Changelog
 
+## 2.23
+
+- Updated settings to keep EU and NA LibHistoire tracking separate to prevent resetting the data when switching between servers
+
+## 2.22
+
+- Fix for error on line 303: operator - is not supported for number - table when no LibHistoire join date is present
+
 ## 2.19, 2.20
 
 - Possible fix for an error caused by users joining a guild after AMT has initialized
