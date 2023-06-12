@@ -1059,7 +1059,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.18',
+    version = '2.20',
     registerForRefresh = true,
     registerForDefaults = true,
   }
@@ -1235,6 +1235,13 @@ function AMT:InitRosterChanges()
 
 end
 
+local function OnPlayerJoinedGuild(eventCode, guildId, displayName)
+  --AMT:dm("Debug", "OnPlayerJoinedGuild")
+  local guildName = GetGuildName(guildId)
+  AMT:createUser(guildName, displayName)
+end
+EVENT_MANAGER:RegisterForEvent(AddonName .. "_JoinedGuild", EVENT_GUILD_MEMBER_ADDED, OnPlayerJoinedGuild)
+
 -- Will be called upon loading the addon
 local function onAddOnLoaded(eventCode, addonName)
   if (addonName == AddonName) then
@@ -1262,10 +1269,9 @@ local function onAddOnLoaded(eventCode, addonName)
     AMT:UpdatePlayerStatusLastSeen()
     AMT:InitRosterChanges()
 
-    EVENT_MANAGER:RegisterForEvent(AddonName, EVENT_GUILD_MEMBER_PLAYER_STATUS_CHANGED, OnStatusChanged)
+    EVENT_MANAGER:RegisterForEvent(AddonName .. "_StatusChanged", EVENT_GUILD_MEMBER_PLAYER_STATUS_CHANGED, OnStatusChanged)
 
-    EVENT_MANAGER:UnregisterForEvent(AddonName, EVENT_ADD_ON_LOADED)
+    EVENT_MANAGER:UnregisterForEvent(AddonName .. "_AddOnLoaded", EVENT_ADD_ON_LOADED)
   end
 end
-
-EVENT_MANAGER:RegisterForEvent(AddonName, EVENT_ADD_ON_LOADED, onAddOnLoaded)
+EVENT_MANAGER:RegisterForEvent(AddonName .. "_AddOnLoaded", EVENT_ADD_ON_LOADED, onAddOnLoaded)
