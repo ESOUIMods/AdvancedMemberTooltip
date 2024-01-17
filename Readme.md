@@ -44,6 +44,10 @@ For Mac: ~/Documents/Elder Scrolls Online/live/
 
 # Changelog
 
+## 2.24
+
+- API Bump
+
 ## 2.23
 
 - Updated settings to keep EU and NA LibHistoire tracking separate to prevent resetting the data when switching between servers
