@@ -44,6 +44,12 @@ For Mac: ~/Documents/Elder Scrolls Online/live/
 
 # Changelog
 
+## 2.25
+
+- Fix GetAmountDonated() for members joining a guild while you are online
+  - leading to errors such as:
+    - AdvancedMemberTooltip.lua:1304: attempt to index a nil value
+
 ## 2.24
 
 - API Bump

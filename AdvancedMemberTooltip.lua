@@ -1177,7 +1177,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.23',
+    version = '2.25',
     registerForRefresh = true,
     registerForDefaults = true,
   }
@@ -1293,6 +1293,7 @@ function AMT:GetAmountDonated(guildId, displayName, formattedZone)
   if applicationPending then return amountDonated end
 
   local guildName = GetGuildName(guildId)
+  if guildName == "" then return amountDonated end
   local name = string.lower(displayName)
   local guildData = AMT.savedData[guildName]
   -- AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK].total
@@ -1300,11 +1301,13 @@ function AMT:GetAmountDonated(guildId, displayName, formattedZone)
   if guildData then
     local memberData = guildData[name]
     if memberData then
-      if memberData[GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK].total then
-        amountDonated = memberData[GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK].total
+      local bankGoldAdded = memberData[GUILD_EVENT_BANKGOLD_ADDED]
+      if bankGoldAdded and bankGoldAdded[AMT_DATERANGE_THISWEEK] then
+        amountDonated = bankGoldAdded[AMT_DATERANGE_THISWEEK].total or 0
       end
     end
   end
+
   return amountDonated
 end
 
