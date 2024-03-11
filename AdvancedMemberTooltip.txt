@@ -5,7 +5,7 @@
 ## Version: 2.25
 ## AddOnVersion: 225
 ## SavedVariables: AdvancedMemberTooltip
-## DependsOn: LibHistoire>=492 LibAddonMenu-2.0>=35 LibGuildRoster>=103
+## DependsOn: LibHistoire>=794 LibAddonMenu-2.0>=36 LibGuildRoster>=103
 ## OptionalDependsOn: LibDebugLogger DebugLogViewer
 
 i18n\en.lua
