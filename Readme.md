@@ -44,6 +44,21 @@ For Mac: ~/Documents/Elder Scrolls Online/live/
 
 # Changelog
 
+## 2.28
+
+- API Bump For Dependencies
+- Updates for Join date and Deposits now that user events are viewable to the individual that made them
+
+Note: ZOS still restricts guild deposits based on GM settings
+
+## 2.27
+
+- API Bump For Dependencies
+
+## 2.26
+
+- Updated for U41
+
 ## 2.25
 
 - Fix GetAmountDonated() for members joining a guild while you are online

@@ -62,6 +62,7 @@ AMT.rosterDirty = false
 AMT.selectedGuildBankId = nil
 AMT.selectedGuildBankName = nil
 AMT.slashCommandFullRefresh = false
+AMT.worldName = GetWorldName()
 
 local weekCutoff = 0
 local todayStart = 0
@@ -100,17 +101,21 @@ local defaultData = {
     CurrentKioskTime = 0,
     addRosterColumn = true,
     useSunday = false,
-    lastReceivedGeneralEventID = {},
-    lastReceivedBankEventID = {},
+    lastReceivedRosterEventID = {},
+    lastBankedCurrencyEventID = {},
     EventsProcessed = {},
+    newestRosterTimestamp = {},
+    newestBankedCurrencyTimestamp = {},
   },
   ["EU Megaserver"] = {
     CurrentKioskTime = 0,
     addRosterColumn = true,
     useSunday = false,
-    lastReceivedGeneralEventID = {},
-    lastReceivedBankEventID = {},
+    lastReceivedRosterEventID = {},
+    lastBankedCurrencyEventID = {},
     EventsProcessed = {},
+    newestRosterTimestamp = {},
+    newestBankedCurrencyTimestamp = {},
   },
 }
 local exampleGuildId = nil
@@ -210,6 +215,26 @@ end
 -- Hooked functions
 local org_ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter = ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter
 local org_ZO_KeyboardGuildRosterRowDisplayName_OnMouseExit = ZO_KeyboardGuildRosterRowDisplayName_OnMouseExit
+
+function AMT:IsLibHistoireListenerSetup(guildId)
+  local generalListener = AMT.LibHistoireGeneralListener[guildId]
+  local bankListener = AMT.LibHistoireBankListener[guildId]
+  if generalListener ~= nil and bankListener ~= nil then
+    if next(generalListener) ~= nil and next(bankListener) ~= nil then
+      return true
+    end
+  end
+  return false
+end
+
+function AMT:AreLibHistoireListenersRunning(guildId)
+  local generalListener = AMT.LibHistoireGeneralListener[guildId]
+  local bankListener = AMT.LibHistoireBankListener[guildId]
+  if AMT:IsLibHistoireListenerSetup(guildId) then
+    return generalListener:IsRunning() and bankListener:IsRunning()
+  end
+  return false
+end
 
 local function secToTime(timeframe)
   local outputString = ""
@@ -338,12 +363,14 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
       -- All Deposit info
       tooltip = tooltip .. GetString(AMT_DEPOSITS) .. ':' .. "\n"
       local currentPlayer = displayName == string.lower(GetDisplayName())
-      local bankDepositType
+      local bankDepositType = GUILD_EVENT_BANKGOLD_ADDED
+      --[[TODO: update tables now that permisson changed for user events
       if viewDepositWithdraws then
         bankDepositType = GUILD_EVENT_BANKGOLD_ADDED
       else
         bankDepositType = CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT
       end
+      ]]--
 
       local totaltDepositStr, lastDepositStr
       -- Total Deposits, timeFirst
@@ -370,11 +397,14 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
 
       -- All Withdrawal info
       tooltip = tooltip .. GetString(AMT_WITHDRAWALS) .. ':' .. "\n"
+      bankDepositType = GUILD_EVENT_BANKGOLD_REMOVED
+      --[[TODO: update tables now that permisson changed for user events
       if viewDepositWithdraws then
         bankDepositType = GUILD_EVENT_BANKGOLD_REMOVED
       else
         bankDepositType = CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL
       end
+      ]]--
 
       local totalWithdrawalStr, lastWithdrawalStr
       -- Total Withdrawals, timeFirst
@@ -531,6 +561,22 @@ function AMT.resetUser(guildName, displayName)
   end
 end
 
+local function ConvertEventIdLibHistoireId(eventId)
+  local idString = tostring(eventId)
+  assert(#idString < 10, "eventId is too large to convert")
+  while #idString < 9 do
+    idString = "0" .. idString
+  end
+  return "3" .. idString
+end
+
+local function AddAtIfNeeded(str)
+  if string.sub(str, 1, 1) ~= "@" then
+    str = "@" .. str
+  end
+  return str
+end
+
 function AMT.ProcessGuildBankDeposit(newValue, oldValue, reason, timestamp)
   -- AMT:dm("Debug", "ProcessGuildBankDeposit")
 
@@ -636,50 +682,43 @@ function AMT:SetupListener(guildId)
   -- listener
   AMT.LibHistoireGeneralListener[guildId] = LGH:CreateGuildHistoryListener(guildId, GUILD_HISTORY_GENERAL)
   AMT.LibHistoireBankListener[guildId] = LGH:CreateGuildHistoryListener(guildId, GUILD_HISTORY_BANK)
-  local lastReceivedGeneralEventID
-  local lastReceivedBankEventID
 
-  if AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] then
-    --AMT:dm("Info", string.format("AMT Saved Var: %s, guildId: (%s)", AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId], guildId))
-    lastReceivedGeneralEventID = StringToId64(AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId]) or "0"
-    --AMT:dm("Info", string.format("lastReceivedGeneralEventID set to: %s", lastReceivedGeneralEventID))
-    AMT.LibHistoireGeneralListener[guildId]:SetAfterEventId(lastReceivedGeneralEventID)
+  local newestReceivedGeneralEventID = AMT.savedData[GetWorldName()]["lastReceivedRosterEventID"][guildId] or "0"
+  local newestReceivedBankEventID = AMT.savedData[GetWorldName()]["lastBankedCurrencyEventID"][guildId] or "0"
+
+  if newestReceivedGeneralEventID then
+    local lastReceivedRosterEventID = StringToId64(AMT.savedData[GetWorldName()]["lastReceivedRosterEventID"][guildId]) or "0"
+    --AMT:dm("Info", string.format("lastReceivedRosterEventID set to: %s", lastReceivedRosterEventID))
+    AMT.LibHistoireGeneralListener[guildId]:SetAfterEventId(lastReceivedRosterEventID)
   end
 
   if AMT.libHistoireScanByTimestamp then
     local setAfterTimestamp = AMT.kioskCycle - (ZO_ONE_DAY_IN_SECONDS * 14) -- this week and last week
     AMT.LibHistoireBankListener[guildId]:SetAfterEventTime(setAfterTimestamp)
-  else
-    if AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] then
-      --AMT:dm("Info", string.format("AMT Saved Var: %s, guildId: (%s)", AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId], guildId))
-      lastReceivedBankEventID = StringToId64(AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId]) or "0"
-      --AMT:dm("Info", string.format("lastReceivedBankEventID set to: %s", lastReceivedBankEventID))
-      AMT.LibHistoireBankListener[guildId]:SetAfterEventId(lastReceivedBankEventID)
-    end
+  elseif newestReceivedBankEventID then
+    local lastBankedCurrencyEventID = StringToId64(AMT.savedData[GetWorldName()]["lastBankedCurrencyEventID"][guildId]) or "0"
+    --AMT:dm("Info", string.format("lastBankedCurrencyEventID set to: %s", lastBankedCurrencyEventID))
+    AMT.LibHistoireBankListener[guildId]:SetAfterEventId(lastBankedCurrencyEventID)
   end
 
   -- Begin Listener General
   AMT.LibHistoireGeneralListener[guildId]:SetEventCallback(function(eventType, eventId, eventTime, p1, p2, p3, p4, p5, p6)
     if eventType == GUILD_EVENT_GUILD_JOIN then
-      local param1 = p1 or ""
-      local param2 = p2 or ""
-      local param3 = p3 or ""
-      local param4 = p4 or ""
-      local param5 = p5 or ""
-      local param6 = p6 or ""
-      local theString = param1 .. param2 .. param3 .. param4 .. param5 .. param6
-
-      if not lastReceivedGeneralEventID or CompareId64s(eventId, lastReceivedGeneralEventID) > 0 then
-        AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] = Id64ToString(eventId)
-        lastReceivedGeneralEventID = eventId
-      end
+      local convertedId = Id64ToString(eventId)
       local theEvent = {
         evType = eventType,
         evTime = eventTime,
         evName = p1, -- Username that joined the guild
         evGold = nil, -- because it is when user joined
-        eventId = Id64ToString(eventId), -- eventId but new
+        eventId = convertedId, -- eventId but new
       }
+
+      local oneEventRange = GetNumGuildHistoryEventRanges(guildId, GUILD_HISTORY_EVENT_CATEGORY_ROSTER) == 1
+      local timeStampInRange = not AMT.savedData[GetWorldName()]["newestRosterTimestamp"][guildId] or theEvent.evTime > AMT.savedData[GetWorldName()]["newestRosterTimestamp"][guildId]
+      if oneEventRange and timeStampInRange then
+        AMT.savedData[GetWorldName()]["lastReceivedRosterEventID"][guildId] = convertedId
+      end
+
       local guildName = GetGuildName(guildId)
       local displayName = string.lower(theEvent.evName)
       if not AMT.savedData[guildName][displayName] then AMT:createUser(guildName, displayName) end
@@ -690,25 +729,21 @@ function AMT:SetupListener(guildId)
   -- Begin Listener Bank
   AMT.LibHistoireBankListener[guildId]:SetEventCallback(function(eventType, eventId, eventTime, p1, p2, p3, p4, p5, p6)
     if (eventType == GUILD_EVENT_BANKGOLD_ADDED or eventType == GUILD_EVENT_BANKGOLD_REMOVED) then
-      local param1 = p1 or ""
-      local param2 = p2 or ""
-      local param3 = p3 or ""
-      local param4 = p4 or ""
-      local param5 = p5 or ""
-      local param6 = p6 or ""
-      local theString = param1 .. param2 .. param3 .. param4 .. param5 .. param6
-
-      if not lastReceivedBankEventID or CompareId64s(eventId, lastReceivedBankEventID) > 0 then
-        AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] = Id64ToString(eventId)
-        lastReceivedBankEventID = eventId
-      end
+      local convertedId = Id64ToString(eventId)
       local theEvent = {
         evType = eventType,
         evTime = eventTime,
         evName = p1, -- Username that joined the guild
         evGold = p2, -- The ammount of gold
-        eventId = Id64ToString(eventId), -- eventId but new
+        eventId = convertedId, -- eventId but new
       }
+
+      local oneEventRange = GetNumGuildHistoryEventRanges(guildId, GUILD_HISTORY_EVENT_CATEGORY_BANKED_CURRENCY) == 1
+      local timeStampInRange = not AMT.savedData[GetWorldName()]["newestBankedCurrencyTimestamp"][guildId] or theEvent.evTime > AMT.savedData[GetWorldName()]["newestBankedCurrencyTimestamp"][guildId]
+      if oneEventRange and timeStampInRange then
+        AMT.savedData[GetWorldName()]["lastBankedCurrencyEventID"][guildId] = convertedId
+      end
+
       AMT.ProcessListenerEvent(guildId, GUILD_HISTORY_BANK, theEvent)
     end
   end)
@@ -761,11 +796,12 @@ function AMT:KioskFlipListenerSetup()
 
   for guildNum = 1, GetNumGuilds() do
     local guildId = GetGuildId(guildNum)
-    AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] = "0"
-    AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] = "0"
+    AMT.savedData[GetWorldName()]["lastReceivedRosterEventID"][guildId] = "0"
+    AMT.savedData[GetWorldName()]["lastBankedCurrencyEventID"][guildId] = "0"
     AMT:SetupListener(guildId)
   end
   AMT:QueueCheckStatus()
+  AMT:TestRefresh()
 end
 
 function AMT:ExportGuildStats()
@@ -888,6 +924,78 @@ function AMT:QueueCheckStatus()
   end
 end
 
+function AMT:TestRefresh()
+  -- local task = ASYNC:Create("TestRefresh")
+  -- GetNumGuildHistoryEvents(*integer* _guildId_, *[GuildHistoryEventCategory|#GuildHistoryEventCategory]* _category_)
+  local numEventsRoster = {}
+  local numEventsBankedCurrency = {}
+  local hasEventsRoster = {}
+  local hasEventsBankedCurrency = {}
+  local eventRangesRoster = {}
+  local eventRangesBankedCurrency = {}
+  local eventsLinkedRoster = {}
+  local eventsLinkedBankedCurrency = {}
+  local numGuilds = GetNumGuilds()
+  for guildNum = 1, numGuilds do
+    local guildId = GetGuildId(guildNum)
+    numEventsRoster[guildId] = GetNumGuildHistoryEvents(guildId, GUILD_HISTORY_EVENT_CATEGORY_ROSTER)
+    numEventsBankedCurrency[guildId] = GetNumGuildHistoryEvents(guildId, GUILD_HISTORY_EVENT_CATEGORY_BANKED_CURRENCY)
+    hasEventsRoster[guildId] = numEventsRoster[guildId] >= 1
+    hasEventsBankedCurrency[guildId] = numEventsBankedCurrency[guildId] >= 1
+    eventRangesRoster[guildId] = GetNumGuildHistoryEventRanges(guildId, GUILD_HISTORY_EVENT_CATEGORY_ROSTER)
+    eventRangesBankedCurrency[guildId] = GetNumGuildHistoryEventRanges(guildId, GUILD_HISTORY_EVENT_CATEGORY_BANKED_CURRENCY)
+    eventsLinkedRoster[guildId] = hasEventsRoster[guildId] and eventRangesRoster[guildId] == 1
+    eventsLinkedBankedCurrency[guildId] = hasEventsBankedCurrency[guildId] and eventRangesBankedCurrency[guildId] == 1
+  end
+  for guildNum = 1, numGuilds do
+    local guildId = GetGuildId(guildNum)
+    if eventsLinkedRoster[guildId] then
+      --AMT:dm("Debug", "Could Process Roster: " .. tostring(guildId) .. " : " .. GetGuildName(guildId))
+      --AMT:dm("Debug", "Num Events Roster: " .. tostring(numEventsRoster[guildId]) .. " : " .. GetGuildName(guildId))
+      local endIndex = numEventsRoster[guildId]
+      for eventIndex = 1, endIndex do
+        local eventId, timestampS, isRedacted, eventType, actingDisplayName, targetDisplayName, rankId = GetGuildHistoryRosterEventInfo(guildId, eventIndex)
+        if eventType == GUILD_HISTORY_ROSTER_EVENT_JOIN then
+          local convertedId = ConvertEventIdLibHistoireId(eventId)
+          actingDisplayName = AddAtIfNeeded(actingDisplayName)
+          local theEvent = {
+            -- backwards compatibility for now
+            evType = GUILD_EVENT_GUILD_JOIN,
+            evTime = timestampS,
+            evName = actingDisplayName, -- Username that joined the guild
+            evGold = nil, -- because it is when user joined
+            eventId = convertedId, -- eventId but new
+          }
+          AMT.ProcessListenerEvent(guildId, GUILD_HISTORY_GENERAL, theEvent)
+        end
+      end
+    end
+    if eventsLinkedBankedCurrency[guildId] then
+      --AMT:dm("Debug", "Could Process BankedCurrency: " .. tostring(guildId) .. " : " .. GetGuildName(guildId))
+      --AMT:dm("Debug", "Num Events BankedCurrency: " .. tostring(hasEventsBankedCurrency[guildId]) .. " : " .. GetGuildName(guildId))
+      local endIndex = numEventsBankedCurrency[guildId]
+      for eventIndex = 1, endIndex do
+        local eventId, timestampS, isRedacted, eventType, displayName, currencyType, amount, kioskName = GetGuildHistoryBankedCurrencyEventInfo(guildId, eventIndex)
+        if (eventType == GUILD_HISTORY_BANKED_CURRENCY_EVENT_DEPOSITED or eventType == GUILD_HISTORY_BANKED_CURRENCY_EVENT_WITHDRAWN) then
+          -- backwards compatibility for now
+          if eventType == GUILD_HISTORY_BANKED_CURRENCY_EVENT_DEPOSITED then eventType = GUILD_EVENT_BANKGOLD_ADDED end
+          if eventType == GUILD_HISTORY_BANKED_CURRENCY_EVENT_WITHDRAWN then eventType = GUILD_EVENT_BANKGOLD_REMOVED end
+          local convertedId = ConvertEventIdLibHistoireId(eventId)
+          displayName = AddAtIfNeeded(displayName)
+          local theEvent = {
+            evType = eventType,
+            evTime = timestampS,
+            evName = displayName, -- Username that joined the guild
+            evGold = amount, -- The ammount of gold
+            eventId = convertedId, -- eventId but new
+          }
+          AMT.ProcessListenerEvent(guildId, GUILD_HISTORY_BANK, theEvent)
+        end
+      end
+    end
+  end
+end
+
 function AMT:DoRefresh()
   AMT:dm("Info", GetString(AMT_LIBHISTOIRE_REFRESHING))
   AMT.libHistoireScanByTimestamp = true
@@ -905,11 +1013,12 @@ function AMT:DoRefresh()
   end
   for guildNum = 1, numGuilds do
     local guildId = GetGuildId(guildNum)
-    AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] = "0"
-    AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] = "0"
+    AMT.savedData[GetWorldName()]["lastReceivedRosterEventID"][guildId] = "0"
+    AMT.savedData[GetWorldName()]["lastBankedCurrencyEventID"][guildId] = "0"
     AMT:SetupListener(guildId)
   end
   AMT:QueueCheckStatus()
+  AMT:TestRefresh()
 end
 
 function table_sort(a, sortfield)
@@ -1177,7 +1286,7 @@ function AMT.Slash(allArgs)
     AMT:KioskFlipListenerSetup()
     return
   end
-  AMT:dm("Info", string.format(GetStting(AMT_HELP_INVALID), args))
+  AMT:dm("Info", string.format(GetString(AMT_HELP_INVALID), args))
 end
 
 function AMT:LibAddonMenuInit()
@@ -1187,7 +1296,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.27',
+    version = '2.28',
     registerForRefresh = true,
     registerForDefaults = true,
   }
@@ -1297,7 +1406,29 @@ function AMT:LibAddonMenuInit()
   LAM:RegisterOptionControls('AdvancedMemberTooltipOptions', optionsData)
 end
 
-function AMT:GetAmountDonated(guildId, displayName, formattedZone)
+function AMT:GetAmountDonated(guildId, displayName, timeframe)
+  local amountDonated = 0
+
+  local guildName = GetGuildName(guildId)
+  if guildName == "" then return amountDonated end
+  local name = string.lower(displayName)
+  local guildData = AMT.savedData[guildName]
+  -- AMT.savedData[guildName][name][GUILD_EVENT_BANKGOLD_ADDED][AMT_DATERANGE_THISWEEK].total
+
+  if guildData then
+    local memberData = guildData[name]
+    if memberData then
+      local bankGoldAdded = memberData[GUILD_EVENT_BANKGOLD_ADDED]
+      if bankGoldAdded and bankGoldAdded[timeframe] then
+        amountDonated = bankGoldAdded[timeframe].total or 0
+      end
+    end
+  end
+
+  return amountDonated
+end
+
+function AMT:GetAmountDonatedForRoster(guildId, displayName, formattedZone)
   local amountDonated = 0
   local applicationPending = GetString(SI_GUILD_INVITED_PLAYER_LOCATION) == formattedZone
   if applicationPending then return amountDonated end
@@ -1334,7 +1465,7 @@ function AMT:InitRosterChanges()
     row = {
       align = TEXT_ALIGN_RIGHT,
       data = function(guildId, data, index)
-        return AMT:GetAmountDonated(guildId, data.displayName, data.formattedZone)
+        return AMT:GetAmountDonatedForRoster(guildId, data.displayName, data.formattedZone)
       end,
       format = function(value)
         return ZO_LocalizeDecimalNumber(value) .. " |t16:16:EsoUI/Art/currency/currency_gold.dds|t"
@@ -1399,8 +1530,8 @@ local function onAddOnLoaded(eventCode, addonName)
       for member = 1, GetNumGuildMembers(guildId), 1 do
         AMT:createUser(guildName, GetGuildMemberInfo(guildId, member))
       end
-      if AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] == nil then AMT.savedData[GetWorldName()]["lastReceivedGeneralEventID"][guildId] = "0" end
-      if AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] == nil then AMT.savedData[GetWorldName()]["lastReceivedBankEventID"][guildId] = "0" end
+      if AMT.savedData[GetWorldName()]["lastReceivedRosterEventID"][guildId] == nil then AMT.savedData[GetWorldName()]["lastReceivedRosterEventID"][guildId] = "0" end
+      if AMT.savedData[GetWorldName()]["lastBankedCurrencyEventID"][guildId] == nil then AMT.savedData[GetWorldName()]["lastBankedCurrencyEventID"][guildId] = "0" end
     end
 
     AMT:LibAddonMenuInit()
@@ -1455,7 +1586,7 @@ local function OnGuildBankTransferError(eventCode, reason)
   --AMT:dm("Debug", "OnGuildBankTransferError")
   AMT:dm("Warn", reason)
 end
-EVENT_MANAGER:RegisterForEvent(AddonName .. "_GuildBankTransferError", EVENT_GUILD_BANK_TRANSFER_ERROR, OnGuildBankTransferError)
+-- EVENT_MANAGER:RegisterForEvent(AddonName .. "_GuildBankTransferError", EVENT_GUILD_BANK_TRANSFER_ERROR, OnGuildBankTransferError)
 
 local function OnCarriedCurrencyUpdate(eventCode, currency, newValue, oldValue, reason, reasonSupplementaryInfo)
   --AMT:dm("Debug", "OnCarriedCurrencyUpdate")
@@ -1464,4 +1595,14 @@ local function OnCarriedCurrencyUpdate(eventCode, currency, newValue, oldValue, 
     AMT.ProcessGuildBankDeposit(newValue, oldValue, reason, timestamp)
   end
 end
-EVENT_MANAGER:RegisterForEvent(AddonName .. "_CarriedCurrencyUpdate", EVENT_CARRIED_CURRENCY_UPDATE, OnCarriedCurrencyUpdate)
+-- EVENT_MANAGER:RegisterForEvent(AddonName .. "_CarriedCurrencyUpdate", EVENT_CARRIED_CURRENCY_UPDATE, OnCarriedCurrencyUpdate)
+
+LGH:RegisterCallback(LGH.callback.INITIALIZED, function()
+  LGH:RegisterCallback(LGH.callback.LINKED_RANGE_FOUND, function(guildId, category)
+    if not AMT:IsLibHistoireListenerSetup(guildId) then return end
+    if not AMT:AreLibHistoireListenersRunning(guildId) then
+      AMT:dm("Debug", "Linked Range Callback for: " .. tostring(guildId))
+      AMT:SetupListener(guildId)
+    end
+  end)
+end)
