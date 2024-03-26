@@ -828,8 +828,8 @@ function AMT:CheckStatus()
   for guildNum = 1, GetNumGuilds() do
     local guildId = GetGuildId(guildNum)
     local guildName = GetGuildName(guildId)
-    local numGeneralEvents = GetNumGuildEvents(guildId, GUILD_HISTORY_GENERAL)
-    local numBankEvents = GetNumGuildEvents(guildId, GUILD_HISTORY_BANK)
+    local numGeneralEvents = GetNumGuildHistoryEvents(guildId, GUILD_HISTORY_EVENT_CATEGORY_ROSTER)
+    local numBankEvents = GetNumGuildHistoryEvents(guildId, GUILD_HISTORY_EVENT_CATEGORY_BANKED_CURRENCY)
     local eventGeneralCount, processingGeneralSpeed, timeLeftGeneral = AMT.LibHistoireGeneralListener[guildId]:GetPendingEventMetrics()
     local eventBankCount, processingBankSpeed, timeLeftBank = AMT.LibHistoireBankListener[guildId]:GetPendingEventMetrics()
 
@@ -1177,7 +1177,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.25',
+    version = '2.26',
     registerForRefresh = true,
     registerForDefaults = true,
   }
