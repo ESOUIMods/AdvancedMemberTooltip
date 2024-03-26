@@ -170,6 +170,16 @@ local function emit_table(log_type, t, indent, table_history)
   indent = indent or "."
   table_history = table_history or {}
 
+  if not t then
+    emit_message(log_type, indent .. "[Nil Table]")
+    return
+  end
+
+  if next(t) == nil then
+    emit_message(log_type, indent .. "[Empty Table]")
+    return
+  end
+
   for k, v in pairs(t) do
     local vType = type(v)
 
@@ -1177,7 +1187,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.26',
+    version = '2.27',
     registerForRefresh = true,
     registerForDefaults = true,
   }
