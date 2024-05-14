@@ -962,7 +962,9 @@ function AMT:RemovePlayerStatusInformation()
     ["EU Megaserver"] = true,
     exportEpochTime = true,
     dateTimeFormat = true,
-    ["NA Megaserver"] = true
+    ["NA Megaserver"] = true,
+    ["lastReceivedGeneralEventID"] = true,
+    ["lastReceivedBankEventID"] = true,
   }
   local saveData = AdvancedMemberTooltip["Default"][GetDisplayName()]["$AccountWide"]
   for guildName, guildData in pairs(saveData) do
@@ -1108,7 +1110,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.32',
+    version = '2.33',
     registerForRefresh = true,
     registerForDefaults = true,
   }
@@ -1330,6 +1332,13 @@ local function onAddOnLoaded(eventCode, addonName)
   if (addonName == AddonName) then
 
     AMT.savedData = ZO_SavedVars:NewAccountWide("AdvancedMemberTooltip", 1, nil, defaultData)
+
+    local keysToCheck = { "lastReceivedGeneralEventID", "lastReceivedBankEventID" }
+    for _, key in ipairs(keysToCheck) do
+      if AMT.savedData[GetWorldName()][key] then
+        AMT.savedData[GetWorldName()][key] = nil
+      end
+    end
 
     AMT.DoTuesdayTime()
     if AMT.savedData[GetWorldName()].useSunday then AMT.DoSundayTime() end
