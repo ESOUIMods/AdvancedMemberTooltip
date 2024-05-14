@@ -637,8 +637,8 @@ end
 
 function AMT:SetupListener(guildId)
   AMT:dm("Debug", "SetupListener: " .. guildId .. " : " .. GetGuildName(guildId))
-  AMT.LibHistoireGeneralListener[guildId] = LGH:CreateGuildHistoryProcessor(guildId, GUILD_HISTORY_GENERAL)
-  AMT.LibHistoireBankListener[guildId] = LGH:CreateGuildHistoryProcessor(guildId, GUILD_HISTORY_BANK)
+  AMT.LibHistoireGeneralListener[guildId] = LGH:CreateGuildHistoryListener(guildId, GUILD_HISTORY_GENERAL)
+  AMT.LibHistoireBankListener[guildId] = LGH:CreateGuildHistoryListener(guildId, GUILD_HISTORY_BANK)
 
   local newestReceivedGeneralEventID = AMT.savedData[GetWorldName()]["lastReceivedRosterEventID"][guildId] or "0"
   local newestReceivedBankEventID = AMT.savedData[GetWorldName()]["lastBankedCurrencyEventID"][guildId] or "0"
@@ -1159,7 +1159,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.29',
+    version = '2.30',
     registerForRefresh = true,
     registerForDefaults = true,
   }
