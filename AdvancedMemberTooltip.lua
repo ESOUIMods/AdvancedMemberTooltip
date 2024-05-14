@@ -246,22 +246,34 @@ local function secToTime(timeframe)
   nextTimeframe = timeframe - (years * 31540000) - (days * 86400) - (hours * 3600) - (minutes * 60)
   local seconds = nextTimeframe
 
-  if years > 0 then
+  local hasYears = years > 0
+  local hasDays = days > 0
+  local hasHours = hours > 0
+  local hasMinutes = minutes > 0
+  local hasSeconds = seconds > 0
+
+  -- Determine whether to display minutes or seconds
+  local displayMinutes = not (hasYears or hasDays or hasHours) or not (hasYears or hasDays) and hasMinutes
+  local displaySeconds = not (hasYears or hasDays or hasHours)
+
+  if hasYears then
     outputString = outputString .. string.format(GetString(AMT_DATE_FORMAT_YEARS), years)
   end
-  if days > 0 then
+  if hasDays then
     outputString = outputString .. string.format(GetString(AMT_DATE_FORMAT_DAYS), days)
   end
-  if hours > 0 then
+  if hasHours then
     outputString = outputString .. string.format(GetString(AMT_DATE_FORMAT_HOURS), hours)
   end
-  if minutes > 0 then
+  if displayMinutes and hasMinutes then
     outputString = outputString .. string.format(GetString(AMT_DATE_FORMAT_MINUTES), minutes)
   end
-  if seconds > 0 then
+  if displaySeconds and hasSeconds then
     outputString = outputString .. string.format(GetString(AMT_DATE_FORMAT_SECONDS), seconds)
   end
-  if outputString == "" then outputString = GetString(AMT_DATE_FORMAT_NONE) end
+  if outputString == "" then
+    outputString = GetString(AMT_DATE_FORMAT_NONE)
+  end
   return outputString
 end
 
@@ -304,28 +316,23 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
 
   local parent = control:GetParent()
   local data = ZO_ScrollList_GetData(parent)
-  local applicationPending = GetString(SI_GUILD_INVITED_PLAYER_LOCATION) == data.formattedZone
-  local guildId = GUILD_SELECTOR.guildId
-  local guildName = GetGuildName(guildId) -- must be this case here
-  local viewDepositWithdraws = DoesPlayerHaveGuildPermission(guildId, GUILD_PERMISSION_BANK_VIEW_DEPOSIT_HISTORY) or DoesPlayerHaveGuildPermission(guildId, GUILD_PERMISSION_BANK_VIEW_WITHDRAW_HISTORY)
+  local applicationPending = data.rankId == DEFAULT_INVITED_RANK
+  local guildMemberIndex = data.index
+  local displayName = string.lower(data.displayName)
+  local guildId = GUILD_ROSTER_MANAGER:GetGuildId()
+  local guildName = GUILD_ROSTER_MANAGER:GetGuildName()
   local foundedDate = AMT:GetGuildFoundedDate(guildId)
   local oldestGeneralGuildEvent = AMT.savedData[guildName]["oldestEvents"][GUILD_HISTORY_GENERAL]
   local hasGeneralGuildEvents = oldestGeneralGuildEvent > 0
-  local displayName = string.lower(data.displayName)
   local timestamp = GetTimeStamp()
-  local foundDisplayName, note, rankIndex, playerStatus, secsSinceLogoff
-  for member = 1, GetNumGuildMembers(guildId), 1 do
-    secsSinceLogoff = -1
-    foundDisplayName, note, rankIndex, playerStatus, secsSinceLogoff = GetGuildMemberInfo(guildId, member)
-    foundDisplayName = string.lower(foundDisplayName)
-    if displayName == foundDisplayName then
-      secsSinceLogoff = AMT:DetermineSecondsSinceLogoff(secsSinceLogoff, foundedDate)
-      break
-    end
-  end
+  --[[ Old Bug: if the sec is more then 1577836800 or Wednesday, January 1, 2020
+  then it might be a time stamp but not 624 months or 12 years ago
+  ]]--
+  local name, note, rankIndex, playerStatus, secsSinceLogoff = GetGuildMemberInfo(guildId, guildMemberIndex)
+  local online = (playerStatus ~= PLAYER_STATUS_OFFLINE)
 
   local tooltip
-  if applicationPending then tooltip = displayName
+  if applicationPending then tooltip = data.displayName
   else tooltip = data.characterName end
   local str
   local oldestDeposit, mostRecentDeposit, oldestTimeframe, mostRecentTimeframe
@@ -350,7 +357,7 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
       end
 
       -- Online Offline Status
-      if memberData.playerStatusOnline then
+      if data.hasCharacter and online then
         tooltip = tooltip .. GetString(AMT_PLAYER_ONLINE) .. "\n\n"
       else
         str = secToTime(secsSinceLogoff)
@@ -359,15 +366,7 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
 
       -- All Deposit info
       tooltip = tooltip .. GetString(AMT_DEPOSITS) .. ':' .. "\n"
-      local currentPlayer = displayName == string.lower(GetDisplayName())
       local bankDepositType = GUILD_EVENT_BANKGOLD_ADDED
-      --[[TODO: update tables now that permisson changed for user events
-      if viewDepositWithdraws then
-        bankDepositType = GUILD_EVENT_BANKGOLD_ADDED
-      else
-        bankDepositType = CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT
-      end
-      ]]--
 
       local totaltDepositStr, lastDepositStr
       -- Total Deposits, timeFirst
@@ -395,13 +394,6 @@ function ZO_KeyboardGuildRosterRowDisplayName_OnMouseEnter(control)
       -- All Withdrawal info
       tooltip = tooltip .. GetString(AMT_WITHDRAWALS) .. ':' .. "\n"
       bankDepositType = GUILD_EVENT_BANKGOLD_REMOVED
-      --[[TODO: update tables now that permisson changed for user events
-      if viewDepositWithdraws then
-        bankDepositType = GUILD_EVENT_BANKGOLD_REMOVED
-      else
-        bankDepositType = CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL
-      end
-      ]]--
 
       local totalWithdrawalStr, lastWithdrawalStr
       -- Total Withdrawals, timeFirst
@@ -452,8 +444,6 @@ end
 function AMT:createUser(guildName, displayName)
   local eventGoldAdded = GUILD_EVENT_BANKGOLD_ADDED
   local eventGoldRemoved = GUILD_EVENT_BANKGOLD_REMOVED
-  local guildBankDeposit = CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT
-  local guildBankWithdrawal = CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL
   local name = string.lower(displayName)
   AMT.savedData[guildName] = AMT.savedData[guildName] or {}
   AMT.savedData[guildName][name] = AMT.savedData[guildName][name] or {}
@@ -470,26 +460,19 @@ function AMT:createUser(guildName, displayName)
   AMT.savedData[guildName][name][eventGoldRemoved].last = nil
   AMT.savedData[guildName][name][eventGoldRemoved].total = nil
 
-  -- setup personal guild bank deposit/withdrawal info
-  AMT.savedData[guildName][name][guildBankDeposit] = AMT.savedData[guildName][name][guildBankDeposit] or {}
-  AMT.savedData[guildName][name][guildBankWithdrawal] = AMT.savedData[guildName][name][guildBankWithdrawal] or {}
 
   -- setup event user info
   AMT.savedData[guildName][name].timeJoined = AMT.savedData[guildName][name].timeJoined or 0
-  --[[ there was a weird error on EU in line 303
+  --[[ there was a weird error on EU for the following line
         str = secToTime(timestamp - memberData.timeJoined)
         I must not have put a 0 at some point for the user data and it was set
         to an empty table.
   ]]--
   if type(AMT.savedData[guildName][name].timeJoined) ~= 'number' then AMT.savedData[guildName][name].timeJoined = 0 end
-  AMT.savedData[guildName][name].playerStatusOnline = AMT.savedData[guildName][name].playerStatusOnline or false
-  AMT.savedData[guildName][name].playerStatusOffline = AMT.savedData[guildName][name].playerStatusOffline or false
 
   for week = AMT_DATERANGE_TODAY, AMT_DATERANGE_30DAY do
     AMT.savedData[guildName][name][eventGoldAdded][week] = AMT.savedData[guildName][name][eventGoldAdded][week] or {}
     AMT.savedData[guildName][name][eventGoldRemoved][week] = AMT.savedData[guildName][name][eventGoldRemoved][week] or {}
-    AMT.savedData[guildName][name][guildBankDeposit][week] = AMT.savedData[guildName][name][guildBankDeposit][week] or {}
-    AMT.savedData[guildName][name][guildBankWithdrawal][week] = AMT.savedData[guildName][name][guildBankWithdrawal][week] or {}
 
     AMT.savedData[guildName][name][eventGoldAdded][week].timeFirst = AMT.savedData[guildName][name][eventGoldAdded][week].timeFirst or 0
     AMT.savedData[guildName][name][eventGoldAdded][week].timeLast = AMT.savedData[guildName][name][eventGoldAdded][week].timeLast or 0
@@ -500,24 +483,12 @@ function AMT:createUser(guildName, displayName)
     AMT.savedData[guildName][name][eventGoldRemoved][week].timeLast = AMT.savedData[guildName][name][eventGoldRemoved][week].timeLast or 0
     AMT.savedData[guildName][name][eventGoldRemoved][week].last = AMT.savedData[guildName][name][eventGoldRemoved][week].last or 0
     AMT.savedData[guildName][name][eventGoldRemoved][week].total = AMT.savedData[guildName][name][eventGoldRemoved][week].total or 0
-
-    AMT.savedData[guildName][name][guildBankDeposit][week].timeFirst = AMT.savedData[guildName][name][guildBankDeposit][week].timeFirst or 0
-    AMT.savedData[guildName][name][guildBankDeposit][week].timeLast = AMT.savedData[guildName][name][guildBankDeposit][week].timeLast or 0
-    AMT.savedData[guildName][name][guildBankDeposit][week].last = AMT.savedData[guildName][name][guildBankDeposit][week].last or 0
-    AMT.savedData[guildName][name][guildBankDeposit][week].total = AMT.savedData[guildName][name][guildBankDeposit][week].total or 0
-
-    AMT.savedData[guildName][name][guildBankWithdrawal][week].timeFirst = AMT.savedData[guildName][name][guildBankWithdrawal][week].timeFirst or 0
-    AMT.savedData[guildName][name][guildBankWithdrawal][week].timeLast = AMT.savedData[guildName][name][guildBankWithdrawal][week].timeLast or 0
-    AMT.savedData[guildName][name][guildBankWithdrawal][week].last = AMT.savedData[guildName][name][guildBankWithdrawal][week].last or 0
-    AMT.savedData[guildName][name][guildBankWithdrawal][week].total = AMT.savedData[guildName][name][guildBankWithdrawal][week].total or 0
   end
 end
 
 function AMT.resetUser(guildName, displayName)
   local eventGoldAdded = GUILD_EVENT_BANKGOLD_ADDED
   local eventGoldRemoved = GUILD_EVENT_BANKGOLD_REMOVED
-  local guildBankDeposit = CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT
-  local guildBankWithdrawal = CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL
   local name = string.lower(displayName)
   AMT.savedData[guildName] = AMT.savedData[guildName] or {}
   if (AMT.savedData[guildName][name] == nil) then
@@ -526,14 +497,10 @@ function AMT.resetUser(guildName, displayName)
   end
   AMT.savedData[guildName][name][eventGoldAdded] = AMT.savedData[guildName][name][eventGoldAdded] or {}
   AMT.savedData[guildName][name][eventGoldRemoved] = AMT.savedData[guildName][name][eventGoldRemoved] or {}
-  AMT.savedData[guildName][name][guildBankDeposit] = AMT.savedData[guildName][name][guildBankDeposit] or {}
-  AMT.savedData[guildName][name][guildBankWithdrawal] = AMT.savedData[guildName][name][guildBankWithdrawal] or {}
 
   for week = AMT_DATERANGE_TODAY, AMT_DATERANGE_30DAY do
     AMT.savedData[guildName][name][eventGoldAdded][week] = AMT.savedData[guildName][name][eventGoldAdded][week] or {}
     AMT.savedData[guildName][name][eventGoldRemoved][week] = AMT.savedData[guildName][name][eventGoldRemoved][week] or {}
-    AMT.savedData[guildName][name][guildBankDeposit][week] = AMT.savedData[guildName][name][guildBankDeposit][week] or {}
-    AMT.savedData[guildName][name][guildBankWithdrawal][week] = AMT.savedData[guildName][name][guildBankWithdrawal][week] or {}
 
     AMT.savedData[guildName][name][eventGoldAdded][week].timeFirst = 0
     AMT.savedData[guildName][name][eventGoldAdded][week].timeLast = 0
@@ -544,17 +511,6 @@ function AMT.resetUser(guildName, displayName)
     AMT.savedData[guildName][name][eventGoldRemoved][week].timeLast = 0
     AMT.savedData[guildName][name][eventGoldRemoved][week].last = 0
     AMT.savedData[guildName][name][eventGoldRemoved][week].total = 0
-    if not AMT.slashCommandFullRefresh then
-      AMT.savedData[guildName][name][guildBankDeposit][week].timeFirst = 0
-      AMT.savedData[guildName][name][guildBankDeposit][week].timeLast = 0
-      AMT.savedData[guildName][name][guildBankDeposit][week].last = 0
-      AMT.savedData[guildName][name][guildBankDeposit][week].total = 0
-
-      AMT.savedData[guildName][name][guildBankWithdrawal][week].timeFirst = 0
-      AMT.savedData[guildName][name][guildBankWithdrawal][week].timeLast = 0
-      AMT.savedData[guildName][name][guildBankWithdrawal][week].last = 0
-      AMT.savedData[guildName][name][guildBankWithdrawal][week].total = 0
-    end
   end
 end
 
@@ -997,35 +953,28 @@ function AMT:GetGuildFoundedDate(guildId)
   return epochTime
 end
 
-function AMT:UpdatePlayerStatusLastSeen()
-  AMT:dm("Debug", "UpdatePlayerStatusLastSeen")
-  local displayName, note, rankIndex, playerStatus, secsSinceLogoff
-  for guildNum = 1, GetNumGuilds() do
-    local guildId = GetGuildId(guildNum)
-    local guildName = GetGuildName(guildId)
-    local foundedDate = AMT:GetGuildFoundedDate(guildId)
-    for member = 1, GetNumGuildMembers(guildId), 1 do
-      displayName, note, rankIndex, playerStatus, secsSinceLogoff = GetGuildMemberInfo(guildId, member)
-      -- because it's stored with lower case names
-      displayName = string.lower(displayName)
-      secsSinceLogoff = AMT:DetermineSecondsSinceLogoff(secsSinceLogoff, foundedDate)
-      if AMT.savedData[guildName][displayName] == nil then AMT:createUser(guildName, displayName) end
-      if AMT.savedData[guildName][displayName].playerStatusOffline == nil then AMT.savedData[guildName][displayName].playerStatusOffline = false end
-      if AMT.savedData[guildName][displayName].playerStatusOnline == nil then AMT.savedData[guildName][displayName].playerStatusOnline = false end
-      if AMT.savedData[guildName][displayName].playerStatusLastSeen then
-        AMT.savedData[guildName][displayName].playerStatusLastSeen = nil
-      end
-      if AMT.savedData[guildName][displayName].secsSinceLogoff then
-        AMT.savedData[guildName][displayName].secsSinceLogoff = nil
-      end
-
-      if playerStatus == PLAYER_STATUS_ONLINE or playerStatus == PLAYER_STATUS_DO_NOT_DISTURB or playerStatus == PLAYER_STATUS_AWAY then
-        AMT.savedData[guildName][displayName].playerStatusOnline = true
-        AMT.savedData[guildName][displayName].playerStatusOffline = false
-      end
-      if playerStatus == PLAYER_STATUS_OFFLINE then
-        AMT.savedData[guildName][displayName].playerStatusOffline = true
-        AMT.savedData[guildName][displayName].playerStatusOnline = false
+function AMT:RemovePlayerStatusInformation()
+  -- AMT:dm("Debug", "RemovePlayerStatusInformation")
+  local skipSettings = {
+    addRosterColumn = true,
+    version = true,
+    addToCutoff = true,
+    ["EU Megaserver"] = true,
+    exportEpochTime = true,
+    dateTimeFormat = true,
+    ["NA Megaserver"] = true
+  }
+  local saveData = AdvancedMemberTooltip["Default"][GetDisplayName()]["$AccountWide"]
+  for guildName, guildData in pairs(saveData) do
+    -- Check if guildName is not a setting
+    if not skipSettings[guildName] then
+      for displayName, memberData in pairs(guildData) do
+        -- List of keys to remove
+        local keysToRemove = { "playerStatusLastSeen", "secsSinceLogoff", "playerStatusOnline", "playerStatusOffline", CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT, CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL }
+        -- Removing keys
+        for _, key in ipairs(keysToRemove) do
+          AMT.savedData[guildName][displayName][key] = nil
+        end
       end
     end
   end
@@ -1159,7 +1108,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.31',
+    version = '2.32',
     registerForRefresh = true,
     registerForDefaults = true,
   }
@@ -1376,23 +1325,6 @@ local function OnPlayerJoinedGuild(eventCode, guildServerId, characterName, guil
 end
 EVENT_MANAGER:RegisterForEvent(AddonName .. "_JoinedGuild", EVENT_GUILD_SELF_JOINED_GUILD, OnPlayerJoinedGuild)
 
-local function OnStatusChanged(eventCode, guildId, displayName, oldStatus, newStatus)
-  local guildName = GetGuildName(guildId)
-  local name = string.lower(displayName)
-
-  if AMT.savedData[guildName] == nil then AMT.createGuild(guildName) end
-  if AMT.savedData[guildName][name] == nil then AMT:createUser(guildName, name) end
-
-  if newStatus == PLAYER_STATUS_ONLINE or newStatus == PLAYER_STATUS_DO_NOT_DISTURB or newStatus == PLAYER_STATUS_AWAY then
-    AMT.savedData[guildName][name].playerStatusOnline = true
-    AMT.savedData[guildName][name].playerStatusOffline = false
-  end
-  if newStatus == PLAYER_STATUS_OFFLINE then
-    AMT.savedData[guildName][name].playerStatusOffline = true
-    AMT.savedData[guildName][name].playerStatusOnline = false
-  end
-end
-
 -- Will be called upon loading the addon
 local function onAddOnLoaded(eventCode, addonName)
   if (addonName == AddonName) then
@@ -1417,10 +1349,8 @@ local function onAddOnLoaded(eventCode, addonName)
     AMT:LibAddonMenuInit()
     AMT:SetupListenerLibHistoire()
     AMT:KioskFlipListenerSetup()
-    AMT:UpdatePlayerStatusLastSeen()
+    AMT:RemovePlayerStatusInformation()
     AMT:InitRosterChanges()
-
-    EVENT_MANAGER:RegisterForEvent(AddonName .. "_StatusChanged", EVENT_GUILD_MEMBER_PLAYER_STATUS_CHANGED, OnStatusChanged)
 
     EVENT_MANAGER:UnregisterForEvent(AddonName .. "_AddOnLoaded", EVENT_ADD_ON_LOADED)
   end
