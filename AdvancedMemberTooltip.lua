@@ -601,9 +601,9 @@ function AMT.ProcessListenerEvent(guildId, category, theEvent)
 
   local function updateJoinDate(guildName, displayName, eventType, timestamp)
     if eventType == GUILD_EVENT_GUILD_JOIN then
+      if not (AMT.savedData[guildName] and AMT.savedData[guildName][displayName]) then return end
       if (AMT.savedData[guildName][displayName].timeJoined ~= timestamp) then
         AMT.savedData[guildName][displayName].timeJoined = timestamp
-        --AMT:dm("Debug", "General Event")
       end
     end
   end
@@ -1159,7 +1159,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.30',
+    version = '2.31',
     registerForRefresh = true,
     registerForDefaults = true,
   }
