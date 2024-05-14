@@ -44,6 +44,27 @@ For Mac: ~/Documents/Elder Scrolls Online/live/
 
 # Changelog
 
+## 2.34
+
+- Cover instance where guild name is an empty string from an old LibHistoire issue
+
+## 2.33
+
+- Fix for: AdvancedMemberTooltip.lua:976: attempt to index a string value
+
+## 2.32
+
+- Added routine to remove unused save data
+- Time format is less precise and omits seconds and minutes depending on days and hours
+
+## 2.31
+
+- Fix for updateJoinDate when you log in just as a new guild member gets invited
+
+## 2.29, 2.30
+
+- Update refresh routine so it isn't never ending now that LibHistoire is updated for U41
+
 ## 2.28
 
 - API Bump For Dependencies

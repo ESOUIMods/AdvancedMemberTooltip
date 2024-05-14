@@ -965,14 +965,26 @@ function AMT:RemovePlayerStatusInformation()
     ["NA Megaserver"] = true,
     ["lastReceivedGeneralEventID"] = true,
     ["lastReceivedBankEventID"] = true,
+    [""] = true,
   }
-  local saveData = AdvancedMemberTooltip["Default"][GetDisplayName()]["$AccountWide"]
+
+  local userDisplayName = GetDisplayName()
+  local saveData = AdvancedMemberTooltip["Default"][userDisplayName]["$AccountWide"]
+
   for guildName, guildData in pairs(saveData) do
     -- Check if guildName is not a setting
     if not skipSettings[guildName] then
       for displayName, memberData in pairs(guildData) do
         -- List of keys to remove
-        local keysToRemove = { "playerStatusLastSeen", "secsSinceLogoff", "playerStatusOnline", "playerStatusOffline", CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT, CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL }
+        local keysToRemove = {
+          "playerStatusLastSeen",
+          "secsSinceLogoff",
+          "playerStatusOnline",
+          "playerStatusOffline",
+          CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT,
+          CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL
+        }
+
         -- Removing keys
         for _, key in ipairs(keysToRemove) do
           AMT.savedData[guildName][displayName][key] = nil
@@ -1110,7 +1122,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.33',
+    version = '2.34',
     registerForRefresh = true,
     registerForDefaults = true,
   }
