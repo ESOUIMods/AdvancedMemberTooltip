@@ -44,6 +44,10 @@ For Mac: ~/Documents/Elder Scrolls Online/live/
 
 # Changelog
 
+## 2.35
+
+- Imporved routine to remove unused save data
+
 ## 2.34
 
 - Cover instance where guild name is an empty string from an old LibHistoire issue

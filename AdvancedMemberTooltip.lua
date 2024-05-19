@@ -954,7 +954,7 @@ function AMT:GetGuildFoundedDate(guildId)
 end
 
 function AMT:RemovePlayerStatusInformation()
-  -- AMT:dm("Debug", "RemovePlayerStatusInformation")
+  AMT:dm("Debug", "RemovePlayerStatusInformation")
   local skipSettings = {
     addRosterColumn = true,
     version = true,
@@ -968,26 +968,34 @@ function AMT:RemovePlayerStatusInformation()
     [""] = true,
   }
 
+  local skipGuildInfo = {
+    oldestEvents = true,
+    lastScans = true,
+  }
+
   local userDisplayName = GetDisplayName()
   local saveData = AdvancedMemberTooltip["Default"][userDisplayName]["$AccountWide"]
 
   for guildName, guildData in pairs(saveData) do
     -- Check if guildName is not a setting
     if not skipSettings[guildName] then
+      local testGuildName = guildName
+      local testGuildData = guildData
       for displayName, memberData in pairs(guildData) do
-        -- List of keys to remove
-        local keysToRemove = {
-          "playerStatusLastSeen",
-          "secsSinceLogoff",
-          "playerStatusOnline",
-          "playerStatusOffline",
-          CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT,
-          CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL
-        }
-
-        -- Removing keys
-        for _, key in ipairs(keysToRemove) do
-          AMT.savedData[guildName][displayName][key] = nil
+        if not skipGuildInfo[displayName] then
+          -- List of keys to remove
+          local keysToRemove = {
+            "playerStatusLastSeen",
+            "secsSinceLogoff",
+            "playerStatusOnline",
+            "playerStatusOffline",
+            CURRENCY_CHANGE_REASON_GUILD_BANK_DEPOSIT,
+            CURRENCY_CHANGE_REASON_GUILD_BANK_WITHDRAWAL
+          }
+          -- Removing keys
+          for _, key in ipairs(keysToRemove) do
+            AMT.savedData[guildName][displayName][key] = nil
+          end
         end
       end
     end
@@ -1122,7 +1130,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.34',
+    version = '2.35',
     registerForRefresh = true,
     registerForDefaults = true,
   }
@@ -1342,13 +1350,28 @@ EVENT_MANAGER:RegisterForEvent(AddonName .. "_JoinedGuild", EVENT_GUILD_SELF_JOI
 -- Will be called upon loading the addon
 local function onAddOnLoaded(eventCode, addonName)
   if (addonName == AddonName) then
+    AMT:dm("Debug", "onAddOnLoaded")
+    local userDisplayName = GetDisplayName()
 
     AMT.savedData = ZO_SavedVars:NewAccountWide("AdvancedMemberTooltip", 1, nil, defaultData)
+    local sv = AdvancedMemberTooltip["Default"][userDisplayName]["$AccountWide"]
 
+    -- Remove old empty guild name from previous LibHistoire  
+    if sv[""] ~= nil then sv[""] = nil end
+
+    -- Remove unused settings
+    local oldSettingsKeys = { "useSunday", "lastReceivedBankEventID", "lastReceivedGeneralEventID", "addRosterColumn", "EventProcessed", "CurrentKioskTime" }
+    for index, key in pairs(oldSettingsKeys) do
+      if sv[key] ~= nil then
+        sv[key] = nil
+      end
+    end
+
+    -- Remove unused settings from NA and EU depending on which you are logged into
     local keysToCheck = { "lastReceivedGeneralEventID", "lastReceivedBankEventID" }
-    for _, key in ipairs(keysToCheck) do
-      if AMT.savedData[GetWorldName()][key] then
-        AMT.savedData[GetWorldName()][key] = nil
+    for index, key in pairs(keysToCheck) do
+      if sv[GetWorldName()][key] ~= nil then
+        sv[GetWorldName()][key] = nil
       end
     end
 
@@ -1361,16 +1384,17 @@ local function onAddOnLoaded(eventCode, addonName)
       local guildName = GetGuildName(guildId)
       AMT.createGuild(guildName)
       for member = 1, GetNumGuildMembers(guildId), 1 do
-        AMT:createUser(guildName, GetGuildMemberInfo(guildId, member))
+        local memberName = GetGuildMemberInfo(guildId, member)
+        AMT:createUser(guildName, memberName)
       end
       if AMT.savedData[GetWorldName()]["lastReceivedRosterEventID"][guildId] == nil then AMT.savedData[GetWorldName()]["lastReceivedRosterEventID"][guildId] = "0" end
       if AMT.savedData[GetWorldName()]["lastBankedCurrencyEventID"][guildId] == nil then AMT.savedData[GetWorldName()]["lastBankedCurrencyEventID"][guildId] = "0" end
     end
 
+    AMT:RemovePlayerStatusInformation()
     AMT:LibAddonMenuInit()
     AMT:SetupListenerLibHistoire()
     AMT:KioskFlipListenerSetup()
-    AMT:RemovePlayerStatusInformation()
     AMT:InitRosterChanges()
 
     EVENT_MANAGER:UnregisterForEvent(AddonName .. "_AddOnLoaded", EVENT_ADD_ON_LOADED)
