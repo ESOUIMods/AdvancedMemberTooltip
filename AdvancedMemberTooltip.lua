@@ -1131,7 +1131,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.36',
+    version = '2.37',
     registerForRefresh = true,
     registerForDefaults = true,
   }
@@ -1357,7 +1357,7 @@ local function onAddOnLoaded(eventCode, addonName)
     AMT.savedData = ZO_SavedVars:NewAccountWide("AdvancedMemberTooltip", 1, nil, defaultData)
     local sv = AdvancedMemberTooltip["Default"][userDisplayName]["$AccountWide"]
 
-    -- Remove old empty guild name from previous LibHistoire  
+    -- Remove old empty guild name from previous LibHistoire
     if sv[""] ~= nil then sv[""] = nil end
 
     -- Remove unused settings
