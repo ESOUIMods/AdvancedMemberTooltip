@@ -44,7 +44,7 @@ For Mac: ~/Documents/Elder Scrolls Online/live/
 
 # Changelog
 
-## 2.35
+## 2.35, 2.36
 
 - Imporved routine to remove unused save data
 

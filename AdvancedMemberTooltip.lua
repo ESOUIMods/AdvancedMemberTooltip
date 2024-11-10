@@ -966,6 +966,7 @@ function AMT:RemovePlayerStatusInformation()
     ["lastReceivedGeneralEventID"] = true,
     ["lastReceivedBankEventID"] = true,
     [""] = true,
+    ["lastCleanUp"] = true,
   }
 
   local skipGuildInfo = {
@@ -1130,7 +1131,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.35',
+    version = '2.36',
     registerForRefresh = true,
     registerForDefaults = true,
   }
@@ -1360,7 +1361,7 @@ local function onAddOnLoaded(eventCode, addonName)
     if sv[""] ~= nil then sv[""] = nil end
 
     -- Remove unused settings
-    local oldSettingsKeys = { "useSunday", "lastReceivedBankEventID", "lastReceivedGeneralEventID", "addRosterColumn", "EventProcessed", "CurrentKioskTime" }
+    local oldSettingsKeys = { "useSunday", "lastReceivedBankEventID", "lastReceivedGeneralEventID", "addRosterColumn", "EventProcessed", "CurrentKioskTime", "lastCleanUp" }
     for index, key in pairs(oldSettingsKeys) do
       if sv[key] ~= nil then
         sv[key] = nil
