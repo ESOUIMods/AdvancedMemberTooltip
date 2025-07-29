@@ -1,11 +1,11 @@
 ## Title: Advanced Member Tooltip (LibHistoire)
 ## Author: Sharlikran, Arkadius
-## APIVersion: 101043 101044
+## APIVersion: 101045 101046
 ## Description: Adds time of membership and guild bank depositions/withdrawals (gold only) to the guild roster tooltips
-## Version: 2.37
-## AddOnVersion: 237
+## Version: 2.38
+## AddOnVersion: 238
 ## SavedVariables: AdvancedMemberTooltip
-## DependsOn: LibHistoire>=1062 LibAddonMenu-2.0>=37 LibGuildRoster>=103 LibAsync>=20304
+## DependsOn: LibHistoire>=1062 LibAddonMenu-2.0>=40 LibGuildRoster>=103 LibAsync>=30000
 ## OptionalDependsOn: LibDebugLogger DebugLogViewer
 
 i18n\en.lua

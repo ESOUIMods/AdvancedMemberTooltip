@@ -23,7 +23,13 @@ AMT = {}
 ----- early helper                          -----
 -------------------------------------------------
 
+local function is_empty_or_nil(t)
+  if t == nil or t == "" then return true end
+  return type(t) == "table" and ZO_IsTableEmpty(t) or false
+end
+
 local function is_in(search_value, search_table)
+  if is_empty_or_nil(search_value) then return false end
   for k, v in pairs(search_table) do
     if search_value == v then return true end
     if type(search_value) == "string" then
@@ -967,6 +973,7 @@ function AMT:RemovePlayerStatusInformation()
     ["lastReceivedBankEventID"] = true,
     [""] = true,
     ["lastCleanUp"] = true,
+    ["EXPORT"] = true,
   }
 
   local skipGuildInfo = {
@@ -983,7 +990,7 @@ function AMT:RemovePlayerStatusInformation()
       local testGuildName = guildName
       local testGuildData = guildData
       for displayName, memberData in pairs(guildData) do
-        if not skipGuildInfo[displayName] then
+        if type(memberData) == "table" and not skipGuildInfo[displayName] then
           -- List of keys to remove
           local keysToRemove = {
             "playerStatusLastSeen",
@@ -1131,7 +1138,7 @@ function AMT:LibAddonMenuInit()
     name = 'AdvancedMemberTooltip',
     displayName = 'Advanced Member Tooltip',
     author = 'Arkadius, Calia1120, |cFF9B15Sharlikran|r',
-    version = '2.37',
+    version = '2.38',
     registerForRefresh = true,
     registerForDefaults = true,
   }
