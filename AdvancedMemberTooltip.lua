@@ -549,6 +549,7 @@ function AMT.ProcessListenerEvent(guildId, category, theEvent)
 
   local function addDonation(guildName, displayName, eventType, weekTimeframe, timestamp, goldAmount)
     if (eventType == GUILD_EVENT_BANKGOLD_ADDED) or (eventType == GUILD_EVENT_BANKGOLD_REMOVED) then
+      if not AMT.savedData[guildName][displayName] then return end
       AMT.savedData[guildName][displayName][eventType][weekTimeframe].total = AMT.savedData[guildName][displayName][eventType][weekTimeframe].total + goldAmount
       AMT.savedData[guildName][displayName][eventType][weekTimeframe].last = goldAmount
       AMT.savedData[guildName][displayName][eventType][weekTimeframe].timeLast = timestamp
